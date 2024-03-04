@@ -1,0 +1,14 @@
+.DS_Store
+yarn-error.log
+dist/
+node_modules/
+.yarn/
+
+domain-name-service-contract.zip
+
+env.json
+env.backup.json
+
+.pnp.cjs
+.pnp.loader.mjs
+.vscode/

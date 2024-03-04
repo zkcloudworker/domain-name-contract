@@ -1,0 +1,133 @@
+import { PublicKey, Struct, Field, UInt64, MerkleMapWitness } from "o1js";
+import { Storage } from "./storage";
+/**
+ * Metadata is the metadata of the NFT written to the Merkle Map
+ * @property data The root of the Merkle Map of the data or data itself if it is a leaf
+ * @property kind The root of the Merkle Map of the kind or kind itself if it is a leaf.
+ * Kind can be one of the "string" or "text" or "map" or "image" or any string like "mykind"
+ */
+export class Metadata extends Struct({
+  data: Field,
+  kind: Field,
+}) {
+  /**
+   * Asserts that two Metadata objects are equal
+   * @param state1 first Metadata object
+   * @param state2 second Metadata object
+   */
+  static assertEquals(state1: Metadata, state2: Metadata) {
+    state1.data.assertEquals(state2.data);
+    state1.kind.assertEquals(state2.kind);
+  }
+
+  toFields(): Field[] {
+    return [this.data, this.kind];
+  }
+
+  static fromFields(fields: Field[]): Metadata {
+    return new Metadata({
+      data: fields[0],
+      kind: fields[1],
+    });
+  }
+}
+
+/**
+ * MetadataWitness is the witness of the metadata in the Merkle Map
+ * @property data The witness of the data
+ * @property kind The witness of the kind
+ */
+export class MetadataWitness extends Struct({
+  data: MerkleMapWitness,
+  kind: MerkleMapWitness,
+}) {
+  /**
+   * Asserts that two MetadataWitness objects are equal
+   * @param state1 first MetadataWitness object
+   * @param state2 second MetadataWitness object
+   */
+  static assertEquals(state1: Metadata, state2: Metadata) {
+    state1.data.assertEquals(state2.data);
+    state1.kind.assertEquals(state2.kind);
+  }
+
+  toFields(): Field[] {
+    return [...this.data.toFields(), ...this.kind.toFields()];
+  }
+
+  static fromFields(fields: Field[]): MetadataWitness {
+    return new MetadataWitness({
+      data: MerkleMapWitness.fromFields(fields.slice(0, fields.length / 2)),
+      kind: MerkleMapWitness.fromFields(fields.slice(fields.length / 2)),
+    });
+  }
+}
+
+/**
+ * Update is the data for the update of the metadata to be written to the NFT state
+ * @property oldRoot The old root of the Merkle Map of the metadata
+ * @property newRoot The new root of the Merkle Map of the metadata
+ * @property storage The storage of the NFT - IPFS (i:...) or Arweave (a:...) hash string
+ * @property name The name of the NFT
+ * @property owner The owner of the NFT - Poseidon hash of owner's public key
+ * @property version The new version of the NFT, increases by one with the changing of the metadata or owner
+ * @property verifier The verifier of the NFT - the contract that sends this update
+ */
+export class MetadataUpdate extends Struct({
+  oldRoot: Metadata,
+  newRoot: Metadata,
+  storage: Storage,
+  name: Field,
+  owner: Field,
+  version: UInt64,
+  verifier: PublicKey,
+}) {
+  constructor(value: {
+    oldRoot: Metadata;
+    newRoot: Metadata;
+    storage: Storage;
+    name: Field;
+    owner: Field;
+    version: UInt64;
+    verifier: PublicKey;
+  }) {
+    super(value);
+  }
+
+  toFields(): Field[] {
+    const verifier = this.verifier.toFields();
+    return [
+      this.oldRoot.data,
+      this.oldRoot.kind,
+      this.newRoot.data,
+      this.newRoot.kind,
+      ...this.storage.toFields(),
+      this.name,
+      this.owner,
+      this.version.toFields()[0],
+      verifier[0],
+      verifier[1],
+    ];
+  }
+
+  static fromFields(fields: Field[]): MetadataUpdate {
+    const verifier = PublicKey.fromFields(fields.slice(fields.length - 2));
+    return new MetadataUpdate({
+      oldRoot: new Metadata({
+        data: fields[0],
+        kind: fields[1],
+      }),
+      newRoot: new Metadata({
+        data: fields[2],
+        kind: fields[3],
+      }),
+      storage: new Storage({
+        hashString: [fields[4], fields[5]],
+      }),
+      name: fields[6],
+      owner: fields[7],
+      version: new UInt64(fields[8]),
+      verifier,
+    });
+  }
+}
