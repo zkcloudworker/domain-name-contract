@@ -7,28 +7,38 @@ import {
   AccountUpdate,
   Poseidon,
   MerkleMap,
+  MerkleTree,
   Bool,
   Signature,
   VerificationKey,
   Account,
+  verify,
 } from "o1js";
+import { makeString } from "zkcloudworker";
 import {
   DomainNameContract,
   DomainNameAction,
   ReducerState,
   BATCH_SIZE,
 } from "../src/contract/domain-contract";
+import { stringToFields } from "../src/lib/hash";
 import { MapUpdateProof, MapUpdate, DomainName } from "../src/contract/update";
+import { TREE_HEIGHT, addBlock, BlockElement } from "../src/rollup/blocks";
+import { BlockCalculation } from "../src/rollup/proof";
 import { calculateProof } from "../src/contract/proof";
 import { Storage } from "../src/contract/storage";
 import { Metadata } from "../src/contract/metadata";
 import { emptyActionsHash, calculateActionsHash } from "../src/lib/hash";
 import { Memory } from "../src/lib/memory";
 
-const ELEMENTS_COUNT = 7;
-const map = new MerkleMap();
+const ACTIONS_COUNT = 1;
+const ELEMENTS_NUMBER = 10000;
+const BLOCKS_NUMBER = 2;
+const blockData: BlockElement[][] = [];
 
-let verificationKey: VerificationKey | undefined = undefined;
+let treeVerificationKey: VerificationKey | undefined = undefined;
+let mapVerificationKey: VerificationKey | undefined = undefined;
+let blocks: Field[] = [];
 
 describe("Contract", () => {
   const Local = Mina.LocalBlockchain();
@@ -44,6 +54,28 @@ describe("Contract", () => {
   const metadata = new Metadata({ data: Field(0), kind: Field(0) });
   const ownerPrivateKey = PrivateKey.random(); // owner of the contract
   const ownerPublicKey = ownerPrivateKey.toPublicKey();
+
+  it(`should prepare blocks data`, async () => {
+    console.time(`prepared data`);
+    for (let j = 0; j < BLOCKS_NUMBER; j++) {
+      const blockElements: BlockElement[] = [];
+      for (let i = 0; i < ELEMENTS_NUMBER; i++) {
+        const key = stringToFields(makeString(30));
+        expect(key.length).toBe(1);
+        const storage = stringToFields("i:" + makeString(45));
+        expect(storage.length).toBe(2);
+        const address = PrivateKey.random().toPublicKey().toFields();
+        const value = Poseidon.hash([...address, ...storage]);
+        const element: BlockElement = {
+          key: key[0],
+          value,
+        };
+        blockElements.push(element);
+      }
+      blockData.push(blockElements);
+    }
+    console.timeEnd(`prepared data`);
+  });
 
   it(`should compile contract`, async () => {
     console.time("methods analyzed");
@@ -82,10 +114,29 @@ describe("Contract", () => {
       `method's total size for a MapUpdate is ${size} rows (${percentage}% of max ${maxRows} rows)`
     );
 
+    const methods2 = BlockCalculation.analyzeMethods();
+
+    //console.log("methods", methods);
+    // calculate the size of the contract - the sum or rows for each method
+    size = Object.values(methods2).reduce(
+      (acc, method) => acc + method.rows,
+      0
+    );
+    // calculate percentage rounded to 0 decimal places
+    percentage = Math.round((size / maxRows) * 100);
+
+    console.log(
+      `method's total size for a BlockCalculation is ${size} rows (${percentage}% of max ${maxRows} rows)`
+    );
+
     console.log("Compiling contracts...");
     console.time("MapUpdate compiled");
-    verificationKey = (await MapUpdate.compile()).verificationKey;
+    mapVerificationKey = (await MapUpdate.compile()).verificationKey;
     console.timeEnd("MapUpdate compiled");
+
+    console.time("BlockCalculation compiled");
+    treeVerificationKey = (await BlockCalculation.compile()).verificationKey;
+    console.timeEnd("BlockCalculation compiled");
 
     console.time("DomainNameContract compiled");
     await DomainNameContract.compile();
@@ -93,8 +144,65 @@ describe("Contract", () => {
     Memory.info(`should compile the SmartContract`);
   });
 
+  it("should deploy the contract", async () => {
+    const tx = await Mina.transaction({ sender }, () => {
+      AccountUpdate.fundNewAccount(sender);
+      zkApp.deploy({});
+      zkApp.domain.set(Field(0));
+      zkApp.owner.set(ownerPublicKey);
+    });
+    await tx.sign([deployer, privateKey]).send();
+    Memory.info(`should deploy the contract`);
+    const account = Account(publicKey);
+    const finalActionState = account.actionState.get();
+    //console.log("first ActionState", finalActionState.toJSON());
+    const emptyActionsState = emptyActionsHash();
+    //console.log("emptyActionsState", emptyActionsState.toJSON());
+    const reducerActionsState = Reducer.initialActionState;
+    //console.log("reducerActionsState", reducerActionsState.toJSON());
+    expect(finalActionState.toJSON()).toEqual(emptyActionsState.toJSON());
+    expect(finalActionState.toJSON()).toEqual(reducerActionsState.toJSON());
+    const isSynced = zkApp.isSynced.get().toBoolean();
+    expect(isSynced).toEqual(true);
+    const root = zkApp.root.get();
+    const updates = zkApp.updates.get();
+    expect(root.toJSON()).toEqual(new MerkleTree(20).getRoot().toJSON());
+    expect(updates.toJSON()).toEqual(new MerkleMap().getRoot().toJSON());
+    const block = zkApp.block.get();
+    expect(block.toJSON()).toEqual(Field(0).toJSON());
+  });
+
+  it(`should create a blocks`, async () => {
+    expect(treeVerificationKey).toBeDefined();
+    if (treeVerificationKey === undefined) return;
+
+    for (let i = 0; i < BLOCKS_NUMBER; i++) {
+      console.time(`created a block ${i} of ${ELEMENTS_NUMBER} elements`);
+      const proof = await addBlock(blocks, blockData[i], Field(0));
+      const ok = await verify(proof, treeVerificationKey);
+      expect(ok).toBe(true);
+      if (!ok) return;
+      const root = zkApp.root.get();
+      expect(root.toJSON()).toEqual(proof.publicInput.oldRoot.toJSON());
+      const block = zkApp.block.get();
+      expect(block.toJSON()).toEqual(proof.publicInput.index.toJSON());
+      const signature = Signature.create(
+        ownerPrivateKey,
+        proof.publicInput.toFields()
+      );
+      const tx = await Mina.transaction({ sender }, () => {
+        zkApp.commitNewNames(proof, signature, storage);
+      });
+      await tx.prove();
+      await tx.sign([deployer]).send();
+      Memory.info(`should commit the block ${i}`);
+      blocks.push(proof.publicInput.value);
+      console.timeEnd(`created a block ${i} of ${ELEMENTS_NUMBER} elements`);
+    }
+  });
+
   it("should generate elements", () => {
-    for (let i = 0; i < ELEMENTS_COUNT; i++) {
+    for (let i = 0; i < ACTIONS_COUNT; i++) {
       const name = Field(i < 2 ? 1 : i + 1);
       const userPrivateKey = PrivateKey.random();
       const address = userPrivateKey.toPublicKey();
@@ -110,34 +218,9 @@ describe("Contract", () => {
     }
   });
 
-  it("should deploy the contract", async () => {
-    const root = map.getRoot();
-    const tx = await Mina.transaction({ sender }, () => {
-      AccountUpdate.fundNewAccount(sender);
-      zkApp.deploy({});
-      zkApp.domain.set(Field(0));
-      zkApp.root.set(root);
-      zkApp.actionState.set(Reducer.initialActionState);
-      zkApp.isSynced.set(Bool(true));
-      zkApp.count.set(Field(0));
-      zkApp.owner.set(ownerPublicKey);
-    });
-    await tx.sign([deployer, privateKey]).send();
-    Memory.info(`should deploy the contract`);
-    const account = Account(publicKey);
-    const finalActionState = account.actionState.get();
-    //console.log("first ActionState", finalActionState.toJSON());
-    const emptyActionsState = emptyActionsHash();
-    //console.log("emptyActionsState", emptyActionsState.toJSON());
-    const reducerActionsState = Reducer.initialActionState;
-    //console.log("reducerActionsState", reducerActionsState.toJSON());
-    expect(finalActionState.toJSON()).toEqual(emptyActionsState.toJSON());
-    expect(finalActionState.toJSON()).toEqual(reducerActionsState.toJSON());
-  });
-
   it("should send the elements", async () => {
     console.time("send elements");
-    for (let i = 0; i < ELEMENTS_COUNT; i++) {
+    for (let i = 0; i < ACTIONS_COUNT; i++) {
       const signature = Signature.create(
         userPrivateKeys[i],
         elements[i].toFields()
@@ -145,7 +228,7 @@ describe("Contract", () => {
       const tx = await Mina.transaction({ sender }, () => {
         zkApp.add(elements[i], signature);
       });
-      Memory.info(`element ${i + 1}/${ELEMENTS_COUNT} sent`);
+      Memory.info(`element ${i + 1}/${ACTIONS_COUNT} sent`);
       await tx.prove();
       if (i === 0) Memory.info(`Setting base for RSS memory`, false, true);
       await tx.sign([deployer]).send();
@@ -209,6 +292,8 @@ describe("Contract", () => {
     if (Array.isArray(actions)) length = Math.min(actions.length, BATCH_SIZE);
     while (length > 0) {
       const isSynced = zkApp.isSynced.get().toBoolean();
+      const currentBlock = zkApp.block.get();
+      expect(Number(currentBlock.toBigInt())).toEqual(blocks.length);
       expect(isSynced).toEqual(firstPass);
       firstPass = false;
       console.time("reduce");
@@ -231,18 +316,31 @@ describe("Contract", () => {
         });
         const endActionState: Field = Field.fromJSON(actions[length - 1].hash);
 
-        expect(verificationKey).toBeDefined();
-        if (verificationKey === undefined) return;
-        const proof: MapUpdateProof = await calculateProof(
+        expect(mapVerificationKey).toBeDefined();
+        expect(treeVerificationKey).toBeDefined();
+        if (
+          mapVerificationKey === undefined ||
+          treeVerificationKey === undefined
+        )
+          return;
+        const map = new MerkleMap();
+        const tree = new MerkleTree(20);
+        tree.fill(blocks);
+        const root = zkApp.root.get();
+        expect(root.toJSON()).toBe(tree.getRoot().toJSON());
+        const { proof, blockProof } = await calculateProof(
           elements,
           map,
-          verificationKey,
+          tree,
+          Field(blocks.length),
+          mapVerificationKey,
+          treeVerificationKey,
           true
         );
-        const signature = Signature.create(
-          ownerPrivateKey,
-          proof.publicInput.toFields()
-        );
+        const signature = Signature.create(ownerPrivateKey, [
+          ...proof.publicInput.toFields(),
+          ...blockProof.publicInput.toFields(),
+        ]);
 
         const tx = await Mina.transaction({ sender }, () => {
           zkApp.reduce(
@@ -250,12 +348,14 @@ describe("Contract", () => {
             endActionState,
             reducerState,
             proof,
+            blockProof,
             signature
           );
         });
         await tx.prove();
         await tx.sign([deployer]).send();
         Memory.info(`should update the state`);
+        blocks.push(blockProof.publicInput.value);
       }
       startActionState = zkApp.actionState.get();
       const actionStates = { fromActionState: startActionState };

@@ -12,7 +12,7 @@ import {
   verify,
 } from "o1js";
 import { TREE_HEIGHT, addBlock, BlockElement } from "../src/rollup/blocks";
-import { AddBlock, AddBlockProof } from "../src/rollup/proof";
+import { BlockCalculation, BlockCalculationProof } from "../src/rollup/proof";
 import { stringToFields } from "../src/lib/hash";
 const TREE_MAX_ELEMENTS = (365 * 24 * 60) / 3; // 1 year of 3 minutes blocks
 const ELEMENTS_NUMBER = 10;
@@ -55,7 +55,7 @@ describe("Rollup", () => {
   });
 
   it(`should compile contract`, async () => {
-    const methods = AddBlock.analyzeMethods();
+    const methods = BlockCalculation.analyzeMethods();
     //console.log("methods", methods);
     // calculate the size of the contract - the sum or rows for each method
     const size = Object.values(methods).reduce(
@@ -70,9 +70,9 @@ describe("Rollup", () => {
       `method's total size for AddBlock is ${size} rows (${percentage}% of max ${maxRows} rows)`
     );
     console.log("Compiling contract...");
-    console.time("AddBlock compiled");
-    verificationKey = (await AddBlock.compile()).verificationKey;
-    console.timeEnd("AddBlock compiled");
+    console.time("BlockCalculation compiled");
+    verificationKey = (await BlockCalculation.compile()).verificationKey;
+    console.timeEnd("BlockCalculation compiled");
   });
 
   it(`should create a blocks`, async () => {

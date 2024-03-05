@@ -1,6 +1,12 @@
 import { MerkleMap, MerkleTree, Field } from "o1js";
+
 //import { FastMerkleTree, MerkleNode } from "../lib/fast-merkle-tree";
-import { AddBlock, AddBlockProof, Block, MerkleTreeWitness } from "./proof";
+import {
+  BlockCalculation,
+  BlockCalculationProof,
+  Block,
+  BlockMerkleTreeWitness,
+} from "./proof";
 
 export const TREE_HEIGHT = 20;
 
@@ -22,8 +28,8 @@ export async function addBlock(
   blocks: Field[],
   elements: BlockElement[],
   expiryTimeSlot: Field
-): Promise<AddBlockProof> {
-  /*
+): Promise<BlockCalculationProof> {
+  /* TODO: use FastMerkleTree
       const tree: FastMerkleTree = new FastMerkleTree(TREE_HEIGHT);
       const nodes: MerkleNode[] = [];
       for (let i = 0; i < size; i++)
@@ -40,14 +46,14 @@ export async function addBlock(
   const blockRoot = createBlock(elements, expiryTimeSlot);
   tree.setLeaf(BigInt(size), blockRoot);
   const newRoot = tree.getRoot();
-  const witness = new MerkleTreeWitness(tree.getWitness(BigInt(size)));
+  const witness = new BlockMerkleTreeWitness(tree.getWitness(BigInt(size)));
   const block: Block = new Block({
     oldRoot,
     newRoot,
     index: Field(size),
     value: blockRoot,
   });
-  const proof = await AddBlock.create(block, witness);
+  const proof = await BlockCalculation.create(block, witness);
 
   return proof;
 }

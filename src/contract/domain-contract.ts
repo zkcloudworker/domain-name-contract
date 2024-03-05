@@ -11,10 +11,13 @@ import {
   PublicKey,
   Bool,
   Signature,
+  MerkleTree,
+  MerkleMap,
 } from "o1js";
 
 import { Storage } from "./storage";
 import { MapUpdateProof, MapTransition } from "./update";
+import { Block, BlockCalculationProof } from "../rollup/proof";
 import { DomainName } from "./update";
 
 export const BATCH_SIZE = 3; //TODO: change to 256 in production
@@ -39,11 +42,16 @@ export class MapTransitionEvent extends Struct({
   storage: Storage,
 }) {}
 
+export class BlockEvent extends Struct({
+  transition: Block,
+  storage: Storage,
+}) {}
+
 export class DomainNameContract extends SmartContract {
   @state(Field) domain = State<Field>();
   @state(Field) root = State<Field>();
   @state(Field) updates = State<Field>();
-  @state(Field) count = State<Field>();
+  @state(Field) block = State<Field>();
   @state(Field) actionState = State<Field>();
   @state(PublicKey) owner = State<PublicKey>();
   @state(Bool) isSynced = State<Bool>();
@@ -56,7 +64,16 @@ export class DomainNameContract extends SmartContract {
     });
   }
 
-  // TODO: add init, snapshot, 5 last states in token accounts
+  init() {
+    super.init();
+    this.root.set(new MerkleTree(20).getRoot());
+    this.updates.set(new MerkleMap().getRoot());
+    this.actionState.set(Reducer.initialActionState);
+    this.isSynced.set(Bool(true));
+    this.block.set(Field(0));
+  }
+
+  // TODO: snapshot, 5 last states in token accounts, reduce updates
 
   reducer = Reducer({
     actionType: DomainNameAction,
@@ -66,7 +83,7 @@ export class DomainNameContract extends SmartContract {
     add: DomainName,
     update: DomainName,
     reduce: ReducerState,
-    commitNewNames: MapTransitionEvent,
+    commitNewNames: BlockEvent,
     commitUpdatedNames: MapTransitionEvent,
   };
 
@@ -84,7 +101,6 @@ export class DomainNameContract extends SmartContract {
     const action = new DomainNameAction({ domain, hash });
 
     signature.verify(domain.address, domain.toFields()).assertEquals(true);
-    this.reducer.dispatch(action);
     this.emitEvent("update", domain);
   }
 
@@ -93,18 +109,31 @@ export class DomainNameContract extends SmartContract {
     endActionState: Field,
     reducerState: ReducerState,
     proof: MapUpdateProof,
+    blockProof: BlockCalculationProof,
     signature: Signature
   ) {
     const owner = this.owner.getAndRequireEquals();
-    signature.verify(owner, proof.publicInput.toFields()).assertEquals(true);
+    const block = this.block.getAndRequireEquals();
+    signature
+      .verify(owner, [
+        ...proof.publicInput.toFields(),
+        ...blockProof.publicInput.toFields(),
+      ])
+      .assertEquals(true);
     proof.verify();
-    proof.publicInput.oldRoot.assertEquals(this.root.getAndRequireEquals());
+    proof.publicInput.oldRoot.assertEquals(new MerkleMap().getRoot());
     proof.publicInput.hash.assertEquals(reducerState.hash);
     proof.publicInput.count.assertEquals(reducerState.count.toFields()[0]);
 
+    blockProof.verify();
+    blockProof.publicInput.oldRoot.assertEquals(
+      this.root.getAndRequireEquals()
+    );
+    blockProof.publicInput.value.assertEquals(proof.publicInput.newRoot);
+    blockProof.publicInput.index.assertEquals(block);
+
     const actionState = this.actionState.getAndRequireEquals();
     actionState.assertEquals(startActionState);
-    const count = this.count.getAndRequireEquals();
 
     const pendingActions = this.reducer.getActions({
       fromActionState: actionState,
@@ -139,43 +168,59 @@ export class DomainNameContract extends SmartContract {
     const accountActionState = this.account.actionState.getAndRequireEquals();
     const isSynced = newActionState.equals(accountActionState);
     this.isSynced.set(isSynced);
-    this.count.set(count.add(newReducerState.count));
     this.actionState.set(newActionState);
-    this.root.set(proof.publicInput.newRoot);
+    this.root.set(blockProof.publicInput.newRoot);
+    this.block.set(block.add(Field(1)));
     this.emitEvent("reduce", reducerState);
   }
 
   @method commitNewNames(
-    proof: MapUpdateProof,
+    proof: BlockCalculationProof,
     signature: Signature,
     storage: Storage
   ) {
     const owner = this.owner.getAndRequireEquals();
+    const block = this.block.getAndRequireEquals();
     signature.verify(owner, proof.publicInput.toFields()).assertEquals(true);
     proof.verify();
     proof.publicInput.oldRoot.assertEquals(this.root.getAndRequireEquals());
+    proof.publicInput.index.assertEquals(block);
 
-    const count = this.count.getAndRequireEquals();
-    this.count.set(count.add(proof.publicInput.count));
     this.root.set(proof.publicInput.newRoot);
-    const transitionEvent = new MapTransitionEvent({
+    this.block.set(block.add(Field(1)));
+    const transitionEvent = new BlockEvent({
       transition: proof.publicInput,
       storage: storage,
     });
     this.emitEvent("commitNewNames", transitionEvent);
   }
 
+  // TODO: prove that content of the updates in block and the updates Map is the same
   @method commitUpdatedNames(
     proof: MapUpdateProof,
+    blockProof: BlockCalculationProof,
     signature: Signature,
     storage: Storage
   ) {
     const owner = this.owner.getAndRequireEquals();
-    signature.verify(owner, proof.publicInput.toFields()).assertEquals(true);
+    const block = this.block.getAndRequireEquals();
+    signature
+      .verify(owner, [
+        ...proof.publicInput.toFields(),
+        ...blockProof.publicInput.toFields(),
+      ])
+      .assertEquals(true);
     proof.verify();
     proof.publicInput.oldRoot.assertEquals(this.updates.getAndRequireEquals());
+    blockProof.verify();
+    blockProof.publicInput.oldRoot.assertEquals(
+      this.root.getAndRequireEquals()
+    );
+    blockProof.publicInput.index.assertEquals(block);
 
     this.updates.set(proof.publicInput.newRoot);
+    this.root.set(blockProof.publicInput.newRoot);
+    this.block.set(block.add(Field(1)));
     const transitionEvent = new MapTransitionEvent({
       transition: proof.publicInput,
       storage: storage,
@@ -190,10 +235,10 @@ export class DomainNameContract extends SmartContract {
   }
 
   // TODO: remove after debugging
-  @method setRoot(root: Field, count: Field, signature: Signature) {
+  @method setRoot(root: Field, block: Field, signature: Signature) {
     const owner = this.owner.getAndRequireEquals();
-    signature.verify(owner, [root, count]).assertEquals(true);
+    signature.verify(owner, [root, block]).assertEquals(true);
     this.root.set(root);
-    this.count.set(count);
+    this.block.set(block);
   }
 }
