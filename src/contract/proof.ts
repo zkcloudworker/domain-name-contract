@@ -1,4 +1,4 @@
-import { Field, MerkleMap, verify, VerificationKey } from "o1js";
+import { Field, MerkleMap, verify, VerificationKey, MerkleTree } from "o1js";
 import { DomainNameAction } from "./domain-contract";
 import {
   MapUpdateData,
@@ -8,16 +8,27 @@ import {
   DomainName,
 } from "./update";
 import { Memory } from "../lib/memory";
+import {
+  BlockCalculation,
+  BlockCalculationProof,
+  Block,
+  BlockMerkleTreeWitness,
+} from "../rollup/proof";
 
 export async function calculateProof(
   elements: DomainNameAction[],
   map: MerkleMap,
-  verificationKey: VerificationKey | undefined,
+  tree: MerkleTree,
+  block: Field,
+  mapVerificationKey: VerificationKey | undefined,
+  treeVerificationKey: VerificationKey | undefined,
   verbose: boolean = false
-): Promise<MapUpdateProof> {
+): Promise<{ proof: MapUpdateProof; blockProof: BlockCalculationProof }> {
   console.log(`Calculating proofs for ${elements.length} elements...`);
-  if (verificationKey === undefined)
-    throw new Error("Verification key is not defined");
+  if (mapVerificationKey === undefined)
+    throw new Error("Map Verification key is not defined");
+  if (treeVerificationKey === undefined)
+    throw new Error("Tree Verification key is not defined");
 
   interface ElementState {
     isElementAccepted: boolean;
@@ -83,7 +94,7 @@ export async function calculateProof(
   }
   const verificationResult: boolean = await verify(
     proof.toJSON(),
-    verificationKey
+    mapVerificationKey
   );
 
   console.log("Proof verification result:", verificationResult);
@@ -91,6 +102,47 @@ export async function calculateProof(
     throw new Error("Proof verification error");
   }
 
+  const blockProof = await calculateBlockProof(
+    tree,
+    block,
+    map.getRoot(),
+    treeVerificationKey
+  );
+
+  return { proof, blockProof };
+}
+
+export async function calculateBlockProof(
+  tree: MerkleTree,
+  block: Field,
+  value: Field,
+  treeVerificationKey: VerificationKey | undefined,
+  verbose: boolean = false
+): Promise<BlockCalculationProof> {
+  if (treeVerificationKey === undefined)
+    throw new Error("Tree Verification key is not defined");
+  const oldRoot = tree.getRoot();
+  const index = block.toBigInt();
+  tree.setLeaf(index, value);
+  const newRoot = tree.getRoot();
+  const witness: BlockMerkleTreeWitness = new BlockMerkleTreeWitness(
+    tree.getWitness(index)
+  );
+  const newBlock: Block = new Block({
+    oldRoot,
+    newRoot,
+    index: block,
+    value,
+  });
+  const proof = await BlockCalculation.create(newBlock, witness);
+  const verificationResult: boolean = await verify(
+    proof.toJSON(),
+    treeVerificationKey
+  );
+  console.log("Block proof verification result:", verificationResult);
+  if (verificationResult === false) {
+    throw new Error("Block proof verification error");
+  }
   return proof;
 }
 

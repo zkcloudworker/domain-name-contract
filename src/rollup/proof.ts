@@ -2,7 +2,7 @@ import { Field, ZkProgram, Struct, MerkleWitness } from "o1js";
 
 import { TREE_HEIGHT } from "./blocks";
 
-export class MerkleTreeWitness extends MerkleWitness(20) {}
+export class BlockMerkleTreeWitness extends MerkleWitness(20) {}
 
 export class Block extends Struct({
   oldRoot: Field,
@@ -12,8 +12,8 @@ export class Block extends Struct({
 }) {
   public toJSON() {
     return {
-      originalRoot: this.oldRoot.toJSON(),
-      redactedRoot: this.newRoot.toJSON(),
+      oldRoot: this.oldRoot.toJSON(),
+      newRoot: this.newRoot.toJSON(),
       index: this.index.toJSON(),
       value: this.value.toJSON(),
     };
@@ -22,23 +22,36 @@ export class Block extends Struct({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public static fromJSON(json: any) {
     return new Block({
-      oldRoot: Field.fromJSON(json.originalRoot),
-      newRoot: Field.fromJSON(json.redactedRoot),
+      oldRoot: Field.fromJSON(json.oldRoot),
+      newRoot: Field.fromJSON(json.newRoot),
       index: Field.fromJSON(json.index),
       value: Field.fromJSON(json.value),
     });
   }
+
+  public toFields() {
+    return [this.oldRoot, this.newRoot, this.index, this.value];
+  }
+
+  public static fromFields(fields: Field[]) {
+    return new Block({
+      oldRoot: fields[0],
+      newRoot: fields[1],
+      index: fields[2],
+      value: fields[3],
+    });
+  }
 }
 
-export const AddBlock = ZkProgram({
+export const BlockCalculation = ZkProgram({
   name: "AddBlock",
   publicInput: Block,
 
   methods: {
     create: {
-      privateInputs: [MerkleTreeWitness],
+      privateInputs: [BlockMerkleTreeWitness],
 
-      method(block: Block, witness: MerkleTreeWitness) {
+      method(block: Block, witness: BlockMerkleTreeWitness) {
         const witnessOldRoot = witness.calculateRoot(Field(0));
         block.oldRoot.assertEquals(witnessOldRoot);
         const witnessNewRoot = witness.calculateRoot(block.value);
@@ -50,4 +63,4 @@ export const AddBlock = ZkProgram({
   },
 });
 
-export class AddBlockProof extends ZkProgram.Proof(AddBlock) {}
+export class BlockCalculationProof extends ZkProgram.Proof(BlockCalculation) {}
