@@ -11,6 +11,12 @@ import {
   SelfProof,
 } from "o1js";
 
+export type ValidatorDecisionType =
+  | "validate"
+  | "badBlock"
+  | "createBlock"
+  | "setValidators";
+
 export class ValidatorWitness extends MerkleWitness(3) {}
 
 export class ValidatorsDecision extends Struct({

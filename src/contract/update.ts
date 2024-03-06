@@ -15,6 +15,7 @@ export class DomainNameValue extends Struct({
   address: PublicKey,
   metadata: Metadata,
   storage: Storage,
+  expiry: Field,
 }) {
   hash(): Field {
     return Poseidon.hashPacked(DomainNameValue, this);
@@ -26,6 +27,7 @@ export class DomainName extends Struct({
   address: PublicKey,
   metadata: Metadata,
   storage: Storage,
+  expiry: Field,
 }) {
   toFields(): Field[] {
     return [
@@ -33,6 +35,7 @@ export class DomainName extends Struct({
       ...this.address.toFields(),
       ...this.metadata.toFields(),
       ...this.storage.toFields(),
+      this.expiry,
     ];
   }
 
@@ -42,6 +45,7 @@ export class DomainName extends Struct({
       address: PublicKey.fromFields(fields.slice(1, 3)),
       metadata: Metadata.fromFields(fields.slice(3, 5)),
       storage: Storage.fromFields(fields.slice(5)),
+      expiry: fields[fields.length - 1],
     });
   }
 
@@ -50,6 +54,7 @@ export class DomainName extends Struct({
       address: this.address,
       metadata: this.metadata,
       storage: this.storage,
+      expiry: this.expiry,
     }).hash();
   }
 
@@ -109,6 +114,7 @@ class MapTransition extends Struct({
         address: domain.address,
         metadata: domain.metadata,
         storage: domain.storage,
+        expiry: domain.expiry,
       })
     );
     value.assertEquals(update.newValue);

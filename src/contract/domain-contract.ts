@@ -5,70 +5,85 @@ import {
   method,
   SmartContract,
   DeployArgs,
-  Reducer,
   Permissions,
   Struct,
   PublicKey,
   Bool,
   Signature,
-  MerkleTree,
-  MerkleMap,
+  Account,
+  TokenContract,
+  AccountUpdateForest,
+  UInt64,
+  AccountUpdate,
+  VerificationKey,
+  Poseidon,
 } from "o1js";
 
 import { Storage } from "./storage";
-import { MapUpdateProof, MapTransition } from "./update";
-import { Block, BlockCalculationProof } from "../rollup/proof";
-import { DomainName } from "./update";
+import {
+  ValidatorDecisionType,
+  ValidatorsVotingProof,
+} from "../rollup/validators";
+import { stringToFields } from "../lib/hash";
 
-export const BATCH_SIZE = 3; //TODO: change to 256 in production
-/*
+const setValidators: ValidatorDecisionType = "setValidators";
+const setValidatorsField = stringToFields(setValidators)[0];
 
-Token account data structure:
-- root of Map
-- expiry time slot
-- nullifier map
-- count
-- block number
-- IPFS hash
+const createBlock: ValidatorDecisionType = "createBlock";
+const createBlockField = stringToFields(createBlock)[0];
 
-change with signatures of the owner
-
-what is API for mass registration and update of domain names?
-
-*/
-export class DomainNameAction extends Struct({
-  domain: DomainName,
-  hash: Field,
-}) {}
-
-export class ReducerState extends Struct({
+export class NewBlockData extends Struct({
+  keys: Field,
+  values: Field,
   count: Field,
-  hash: Field,
 }) {
-  static assertEquals(a: ReducerState, b: ReducerState) {
-    a.count.assertEquals(b.count);
-    a.hash.assertEquals(b.hash);
+  toFields() {
+    return [this.keys, this.values, this.count];
+  }
+  hash() {
+    return Poseidon.hashPacked(NewBlockData, this);
   }
 }
 
-export class MapTransitionEvent extends Struct({
-  transition: MapTransition,
+export class BlockData extends Struct({
+  newData: NewBlockData,
+  root: Field,
   storage: Storage,
-}) {}
+  address: PublicKey,
+}) {
+  toFields() {
+    return [
+      ...this.newData.toFields(),
+      this.root,
+      ...this.storage.toFields(),
+      ...this.address.toFields(),
+    ];
+  }
 
+  toState(previousBlock: PublicKey): Field[] {
+    return [
+      this.root,
+      this.newData.hash(),
+      ...previousBlock.toFields(),
+      ...this.storage.toFields(),
+      Bool(false).toField(),
+      Bool(false).toField(),
+    ];
+  }
+}
 export class BlockEvent extends Struct({
-  transition: Block,
-  storage: Storage,
+  root: Field,
+  data: BlockData,
+  previousBlock: PublicKey,
 }) {}
 
-export class DomainNameContract extends SmartContract {
-  @state(Field) domain = State<Field>();
+export class BlockContract extends SmartContract {
   @state(Field) root = State<Field>();
-  @state(Field) updates = State<Field>();
-  @state(Field) block = State<Field>();
-  @state(Field) actionState = State<Field>();
-  @state(PublicKey) owner = State<PublicKey>();
-  @state(Bool) isSynced = State<Bool>();
+  @state(Field) blockData = State<Field>();
+  @state(PublicKey) previousBlock = State<PublicKey>();
+  @state(Storage) storage = State<Storage>();
+  @state(Bool) isFinal = State<Bool>();
+  @state(Bool) isValidated = State<Bool>();
 
   deploy(args: DeployArgs) {
     super.deploy(args);
@@ -80,179 +95,124 @@ export class DomainNameContract extends SmartContract {
 
   init() {
     super.init();
-    this.root.set(new MerkleTree(20).getRoot());
-    this.updates.set(new MerkleMap().getRoot());
-    this.actionState.set(Reducer.initialActionState);
-    this.isSynced.set(Bool(true));
-    this.block.set(Field(0));
+  }
+  @method validate() {
+    this.isValidated.set(Bool(true));
+  }
+  @method invalidate() {
+    this.isValidated.set(Bool(false));
+    this.isFinal.set(Bool(true));
+  }
+
+  @method finalize() {
+    const isFinal = this.isFinal.getAndRequireEquals();
+    isFinal.assertEquals(Bool(false));
+    const isValidated = this.isValidated.getAndRequireEquals();
+    isValidated.assertEquals(Bool(true));
+    this.isFinal.set(Bool(true));
+  }
+}
+
+export class DomainNameContract extends TokenContract {
+  @state(Field) domain = State<Field>();
+  @state(Field) validators = State<Field>();
+  @state(Field) validatorsHash = State<Field>();
+  @state(PublicKey) lastBlock = State<PublicKey>();
+  @state(PublicKey) lastProvedBlock = State<PublicKey>();
+
+  deploy(args: DeployArgs) {
+    super.deploy(args);
+    this.account.permissions.set({
+      ...Permissions.default(),
+      editState: Permissions.proof(),
+    });
+  }
+
+  init() {
+    super.init();
+  }
+
+  @method approveBase(forest: AccountUpdateForest) {
+    this.checkZeroBalanceChange(forest);
   }
 
   // TODO: snapshot, 5 last states in token accounts, reduce updates
 
-  reducer = Reducer({
-    actionType: DomainNameAction,
-  });
-
   events = {
-    add: DomainName,
-    update: DomainName,
-    reduce: ReducerState,
-    commitNewNames: BlockEvent,
-    commitUpdatedNames: MapTransitionEvent,
+    block: BlockEvent,
   };
 
-  @method add(domain: DomainName, signature: Signature) {
-    const hash = domain.hash();
-    const action = new DomainNameAction({ domain, hash });
-
-    signature.verify(domain.address, domain.toFields()).assertEquals(true);
-    this.reducer.dispatch(action);
-    this.emitEvent("add", domain);
-  }
-
-  @method update(domain: DomainName, signature: Signature) {
-    const hash = domain.hash();
-    const action = new DomainNameAction({ domain, hash });
-
-    signature.verify(domain.address, domain.toFields()).assertEquals(true);
-    this.emitEvent("update", domain);
-  }
-
-  @method reduce(
-    startActionState: Field,
-    endActionState: Field,
-    reducerState: ReducerState,
-    proof: MapUpdateProof,
-    blockProof: BlockCalculationProof,
-    signature: Signature
-  ) {
-    const owner = this.owner.getAndRequireEquals();
-    const block = this.block.getAndRequireEquals();
-    signature
-      .verify(owner, [
-        ...proof.publicInput.toFields(),
-        ...blockProof.publicInput.toFields(),
-      ])
-      .assertEquals(true);
-    proof.verify();
-    proof.publicInput.oldRoot.assertEquals(new MerkleMap().getRoot());
-    proof.publicInput.hash.assertEquals(reducerState.hash);
-    proof.publicInput.count.assertEquals(reducerState.count.toFields()[0]);
-
-    blockProof.verify();
-    blockProof.publicInput.oldRoot.assertEquals(
-      this.root.getAndRequireEquals()
-    );
-    blockProof.publicInput.value.assertEquals(proof.publicInput.newRoot);
-    blockProof.publicInput.index.assertEquals(block);
-
-    const actionState = this.actionState.getAndRequireEquals();
-    actionState.assertEquals(startActionState);
-
-    const pendingActions = this.reducer.getActions({
-      fromActionState: actionState,
-      endActionState,
-    });
-
-    let elementsState: ReducerState = new ReducerState({
-      count: Field(0),
-      hash: Field(0),
-    });
-
-    const { state: newReducerState, actionState: newActionState } =
-      this.reducer.reduce(
-        pendingActions,
-        ReducerState,
-        (state: ReducerState, action: DomainNameAction) => {
-          return new ReducerState({
-            count: state.count.add(Field(1)),
-            hash: state.hash.add(action.hash),
-          });
-        },
-        {
-          state: elementsState,
-          actionState: actionState,
-        },
-        {
-          maxTransactionsWithActions: BATCH_SIZE,
-          skipActionStatePrecondition: true,
-        }
-      );
-    ReducerState.assertEquals(newReducerState, reducerState);
-    const accountActionState = this.account.actionState.getAndRequireEquals();
-    const isSynced = newActionState.equals(accountActionState);
-    this.isSynced.set(isSynced);
-    this.actionState.set(newActionState);
-    this.root.set(blockProof.publicInput.newRoot);
-    this.block.set(block.add(Field(1)));
-    this.emitEvent("reduce", reducerState);
-  }
-
-  @method commitNewNames(
-    proof: BlockCalculationProof,
+  @method block(
+    proof: ValidatorsVotingProof,
     signature: Signature,
-    storage: Storage
+    data: BlockData,
+    verificationKey: VerificationKey
   ) {
-    const owner = this.owner.getAndRequireEquals();
-    const block = this.block.getAndRequireEquals();
-    signature.verify(owner, proof.publicInput.toFields()).assertEquals(true);
-    proof.verify();
-    proof.publicInput.oldRoot.assertEquals(this.root.getAndRequireEquals());
-    proof.publicInput.index.assertEquals(block);
-
-    this.root.set(proof.publicInput.newRoot);
-    this.block.set(block.add(Field(1)));
-    const transitionEvent = new BlockEvent({
-      transition: proof.publicInput,
-      storage: storage,
-    });
-    this.emitEvent("commitNewNames", transitionEvent);
-  }
-
-  // TODO: prove that content of the updates in block and the updates Map is the same
-  @method commitUpdatedNames(
-    proof: MapUpdateProof,
-    blockProof: BlockCalculationProof,
-    signature: Signature,
-    storage: Storage
-  ) {
-    const owner = this.owner.getAndRequireEquals();
-    const block = this.block.getAndRequireEquals();
+    // TODO: verify expiry of the decision
+    this.checkValidatorsDecision(proof);
     signature
-      .verify(owner, [
-        ...proof.publicInput.toFields(),
-        ...blockProof.publicInput.toFields(),
-      ])
+      .verify(proof.publicInput.decision.address, data.toFields())
       .assertEquals(true);
-    proof.verify();
-    proof.publicInput.oldRoot.assertEquals(this.updates.getAndRequireEquals());
-    blockProof.verify();
-    blockProof.publicInput.oldRoot.assertEquals(
-      this.root.getAndRequireEquals()
+    proof.publicInput.decision.decision.assertEquals(createBlockField);
+    proof.publicInput.decision.data1.assertEquals(verificationKey.hash);
+    proof.publicInput.decision.data2.assertEquals(
+      Poseidon.hashPacked(PublicKey, data.address)
     );
-    blockProof.publicInput.index.assertEquals(block);
-
-    this.updates.set(proof.publicInput.newRoot);
-    this.root.set(blockProof.publicInput.newRoot);
-    this.block.set(block.add(Field(1)));
-    const transitionEvent = new MapTransitionEvent({
-      transition: proof.publicInput,
-      storage: storage,
+    const tokenId = this.deriveTokenId();
+    const account = Account(data.address, tokenId);
+    const tokenBalance = account.balance.getAndRequireEquals();
+    tokenBalance.assertEquals(UInt64.from(0));
+    this.internal.mint({
+      address: data.address,
+      amount: 1_000_000_000,
     });
-    this.emitEvent("commitUpdatedNames", transitionEvent);
+    const update = AccountUpdate.createSigned(data.address, tokenId);
+    update.body.update.verificationKey = {
+      isSome: Bool(true),
+      value: verificationKey,
+    };
+    update.body.update.permissions = {
+      isSome: Bool(true),
+      value: {
+        ...Permissions.default(),
+        editState: Permissions.proof(),
+      },
+    };
+    const lastBlock = this.lastBlock.getAndRequireEquals();
+    const state = data.toState(lastBlock);
+    update.body.update.appState = [
+      { isSome: Bool(true), value: state[0] },
+      { isSome: Bool(true), value: state[1] },
+      { isSome: Bool(true), value: state[2] },
+      { isSome: Bool(true), value: state[3] },
+      { isSome: Bool(true), value: state[4] },
+      { isSome: Bool(true), value: state[5] },
+      { isSome: Bool(true), value: state[6] },
+      { isSome: Bool(true), value: state[7] },
+    ];
+    const blockEvent = new BlockEvent({
+      root: data.root,
+      data,
+      previousBlock: lastBlock,
+    });
+    this.lastBlock.set(data.address);
+    this.emitEvent("block", blockEvent);
   }
 
-  @method setOwner(newOwner: PublicKey, signature: Signature) {
-    const owner = this.owner.getAndRequireEquals();
-    signature.verify(owner, newOwner.toFields()).assertEquals(true);
-    this.owner.set(newOwner);
+  @method setValidators(proof: ValidatorsVotingProof) {
+    this.checkValidatorsDecision(proof);
+    proof.publicInput.decision.decision.assertEquals(setValidatorsField);
+    this.validators.set(proof.publicInput.decision.data1);
+    this.validatorsHash.set(proof.publicInput.decision.data2);
   }
 
-  // TODO: remove after debugging
-  @method setRoot(root: Field, block: Field, signature: Signature) {
-    const owner = this.owner.getAndRequireEquals();
-    signature.verify(owner, [root, block]).assertEquals(true);
-    this.root.set(root);
-    this.block.set(block);
+  checkValidatorsDecision(proof: ValidatorsVotingProof) {
+    const validators = this.validators.getAndRequireEquals();
+    const validatorsHash = this.validatorsHash.getAndRequireEquals();
+    proof.verify();
+    proof.publicInput.hash.assertEquals(validatorsHash);
+    proof.publicInput.decision.root.assertEquals(validators);
+    proof.publicInput.count.assertGreaterThan(Field(1));
+    proof.publicInput.decision.contract.assertEquals(this.address);
   }
 }
