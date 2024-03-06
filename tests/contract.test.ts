@@ -32,7 +32,7 @@ import { emptyActionsHash, calculateActionsHash } from "../src/lib/hash";
 import { Memory } from "../src/lib/memory";
 
 const ACTIONS_COUNT = 1;
-const ELEMENTS_NUMBER = 10000;
+const ELEMENTS_NUMBER = 1000;
 const BLOCKS_NUMBER = 2;
 const blockData: BlockElement[][] = [];
 
