@@ -30,7 +30,7 @@ describe("Map", () => {
   });
 
   it(`should export tree`, async () => {
-    const tree = new MerkleTree(10);
+    const tree = new MerkleTree(20);
     const maxLeafs = tree.leafCount;
     console.log("maxLeafs", maxLeafs);
     for (let i = 0; i < 20; i++) {

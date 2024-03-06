@@ -1,7 +1,5 @@
 import { Field, ZkProgram, Struct, MerkleWitness } from "o1js";
 
-import { TREE_HEIGHT } from "./blocks";
-
 export class BlockMerkleTreeWitness extends MerkleWitness(20) {}
 
 export class Block extends Struct({
