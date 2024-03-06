@@ -10,13 +10,20 @@ import {
   MerkleTree,
   VerificationKey,
   verify,
+  setNumberOfWorkers,
 } from "o1js";
 import { TREE_HEIGHT, addBlock, BlockElement } from "../src/rollup/blocks";
 import { BlockCalculation, BlockCalculationProof } from "../src/rollup/proof";
+import { MapUpdate, DomainName } from "../src/contract/update";
+import { Storage } from "../src/contract/storage";
+import { Metadata } from "../src/contract/metadata";
+import { calculateProof } from "../src/contract/proof";
 import { stringToFields } from "../src/lib/hash";
+import { DomainNameAction } from "../src/contract/domain-contract";
 const TREE_MAX_ELEMENTS = (365 * 24 * 60) / 3; // 1 year of 3 minutes blocks
 const ELEMENTS_NUMBER = 10;
 const BLOCKS_NUMBER = 3;
+const ACTIONS_COUNT = 2;
 const elements: BlockElement[][] = [];
 const blocks: Field[] = [];
 let verificationKey: VerificationKey | undefined = undefined;
@@ -30,6 +37,50 @@ describe("Rollup", () => {
     const maxLeafs = tree.leafCount;
     console.log("maxLeafs", maxLeafs);
     expect(maxLeafs).toBeGreaterThan(TREE_MAX_ELEMENTS);
+  });
+
+  it(`should calculate proof`, async () => {
+    console.log("Compiling contracts...");
+    console.time("MapUpdate compiled");
+    const mapVerificationKey = (await MapUpdate.compile()).verificationKey;
+    console.timeEnd("MapUpdate compiled");
+
+    console.time("BlockCalculation compiled");
+    const treeVerificationKey = (await BlockCalculation.compile())
+      .verificationKey;
+    console.timeEnd("BlockCalculation compiled");
+    verificationKey = treeVerificationKey;
+    const elements: DomainNameAction[] = [];
+    const storage = new Storage({ hashString: [Field(1), Field(2)] });
+    const metadata = new Metadata({ data: Field(0), kind: Field(0) });
+    for (let i = 0; i < ACTIONS_COUNT; i++) {
+      const name = Field(i < 2 ? 1 : i + 1);
+      const userPrivateKey = PrivateKey.random();
+      const address = userPrivateKey.toPublicKey();
+
+      const element = new DomainName({
+        name,
+        address,
+        metadata,
+        storage,
+      });
+      elements.push({ domain: element, hash: element.hash() });
+    }
+    for (let i = 6; i < 20; i++) {
+      if (i > 6) setNumberOfWorkers(i);
+      const map = new MerkleMap();
+      const tree = new MerkleTree(20);
+      console.time(`created a proof using ${i} workers`);
+      const { proof, blockProof } = await calculateProof(
+        elements,
+        map,
+        tree,
+        Field(0),
+        mapVerificationKey,
+        treeVerificationKey
+      );
+      console.timeEnd(`created a proof using ${i} workers`);
+    }
   });
 
   it(`should prepare data`, async () => {
@@ -54,7 +105,7 @@ describe("Rollup", () => {
     console.timeEnd(`prepared data`);
   });
 
-  it(`should compile contract`, async () => {
+  it.skip(`should compile contract`, async () => {
     const methods = BlockCalculation.analyzeMethods();
     //console.log("methods", methods);
     // calculate the size of the contract - the sum or rows for each method
@@ -67,7 +118,7 @@ describe("Rollup", () => {
     const percentage = Math.round((size / maxRows) * 100);
 
     console.log(
-      `method's total size for AddBlock is ${size} rows (${percentage}% of max ${maxRows} rows)`
+      `method's total size for BlockCalculation is ${size} rows (${percentage}% of max ${maxRows} rows)`
     );
     console.log("Compiling contract...");
     console.time("BlockCalculation compiled");

@@ -39,6 +39,7 @@ export async function addBlock(
       nodes.push({ level: 0, index: BigInt(size), digest: block });
       tree.setLeaves([{ level: 0, index: BigInt(size), digest: block }]);
   */
+  // TODO: count and expiry date
   const tree: MerkleTree = new MerkleTree(TREE_HEIGHT);
   const size = blocks.length;
   tree.fill(blocks);

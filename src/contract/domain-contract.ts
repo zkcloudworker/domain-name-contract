@@ -21,7 +21,21 @@ import { Block, BlockCalculationProof } from "../rollup/proof";
 import { DomainName } from "./update";
 
 export const BATCH_SIZE = 3; //TODO: change to 256 in production
+/*
 
+Token account data structure:
+- root of Map
+- expiry time slot
+- nullifier map
+- count
+- block number
+- IPFS hash
+
+change with signatures of the owner
+
+what is API for mass registration and update of domain names?
+
+*/
 export class DomainNameAction extends Struct({
   domain: DomainName,
   hash: Field,

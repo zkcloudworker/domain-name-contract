@@ -853,7 +853,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*, @types/node@npm:^20.11.20":
+"@types/node@npm:*, @types/node@npm:^20.11.24":
   version: 20.11.24
   resolution: "@types/node@npm:20.11.24"
   dependencies:
@@ -1417,15 +1417,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"detect-gpu@npm:^5.0.5":
-  version: 5.0.38
-  resolution: "detect-gpu@npm:5.0.38"
-  dependencies:
-    webgl-constants: "npm:^1.1.1"
-  checksum: 10c0/04602acd0fcd1af98e07cee8a7d9d7c9f6e54e4ee0cb6f9911a25ba9065c0f43756c5481be88804539476f30f9f86916f662ebf1c0994759a15631a83a00ccb7
-  languageName: node
-  linkType: hard
-
 "detect-newline@npm:^3.0.0":
   version: 3.1.0
   resolution: "detect-newline@npm:3.1.0"
@@ -1446,14 +1437,14 @@ __metadata:
   dependencies:
     "@jest/globals": "npm:^29.7.0"
     "@types/jest": "npm:^29.5.12"
-    "@types/node": "npm:^20.11.20"
+    "@types/node": "npm:^20.11.24"
     axios: "npm:^1.6.7"
     jest: "npm:^29.7.0"
-    o1js: "npm:^0.16.2"
+    o1js: "npm:^0.17.0"
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
     typescript: "npm:^5.3.3"
-    zkcloudworker: "npm:^0.1.5"
+    zkcloudworker: "npm:^0.1.6"
   languageName: unknown
   linkType: soft
 
@@ -2916,20 +2907,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"o1js@npm:^0.16.2":
-  version: 0.16.2
-  resolution: "o1js@npm:0.16.2"
+"o1js@npm:^0.17.0":
+  version: 0.17.0
+  resolution: "o1js@npm:0.17.0"
   dependencies:
     blakejs: "npm:1.2.1"
     cachedir: "npm:^2.4.0"
-    detect-gpu: "npm:^5.0.5"
     isomorphic-fetch: "npm:^3.0.0"
     js-sha256: "npm:^0.9.0"
     reflect-metadata: "npm:^0.1.13"
     tslib: "npm:^2.3.0"
   bin:
     snarky-run: src/build/run.js
-  checksum: 10c0/078d7809737dbb2a9b3e78a520ce8e497e88fae07385814d604bbc7510a6e0b13bb862237e09c7bee5992fd06c32ab29ab66c7a6f5285f856528fcefa9266bc3
+  checksum: 10c0/6a32df1a9ce5d034d7a8e2f4a4eeb3a466a90b4f44049faa689c920391510f0fc6413f9d450828649522df72b8916f9cd2c0d266008a4b17bfe3f2c7dbad01aa
   languageName: node
   linkType: hard
 
@@ -3644,13 +3634,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"webgl-constants@npm:^1.1.1":
-  version: 1.1.1
-  resolution: "webgl-constants@npm:1.1.1"
-  checksum: 10c0/525a9838b0cbcbab902d1bc5457882424a9c146f851042c901ae457123193f5c5e47846b47c1c999e4f3abc24322cac494cea0cc52fec28bd8eb3a05cd79d573
-  languageName: node
-  linkType: hard
-
 "webidl-conversions@npm:^3.0.0":
   version: 3.0.1
   resolution: "webidl-conversions@npm:3.0.1"
@@ -3786,13 +3769,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zkcloudworker@npm:^0.1.5":
-  version: 0.1.5
-  resolution: "zkcloudworker@npm:0.1.5"
+"zkcloudworker@npm:^0.1.6":
+  version: 0.1.6
+  resolution: "zkcloudworker@npm:0.1.6"
   dependencies:
     axios: "npm:^1.6.7"
   peerDependencies:
-    o1js: ^0.16.2
-  checksum: 10c0/393f41fae906705c95050ecf5594ce6267e1fe387858e3fac85824482d9304945388333741be64eadeae018fa27401b148e79eef9118032d8c134456b1323e5b
+    o1js: ^0.17.0
+  checksum: 10c0/d799cbf5338d668ae504910a61336ee93ac322ca8f22584838fc6bd113c3962f6000f594aaef15b16e38b65de990ef105ad44cdbac139bed27150598683cf53d
   languageName: node
   linkType: hard
