@@ -7,6 +7,7 @@ import {
   MerkleMapWitness,
   Poseidon,
   PublicKey,
+  UInt64,
 } from "o1js";
 import { Metadata } from "./metadata";
 import { Storage } from "./storage";
@@ -15,47 +16,46 @@ export class DomainNameValue extends Struct({
   address: PublicKey,
   metadata: Metadata,
   storage: Storage,
-  expiry: Field,
+  expiry: UInt64,
 }) {
   hash(): Field {
     return Poseidon.hashPacked(DomainNameValue, this);
+  }
+  toFields(): Field[] {
+    return [
+      ...this.address.toFields(),
+      ...this.metadata.toFields(),
+      ...this.storage.toFields(),
+      ...this.expiry.toFields(),
+    ];
+  }
+  static fromFields(fields: Field[]): DomainNameValue {
+    return new DomainNameValue({
+      address: PublicKey.fromFields(fields.slice(0, 2)),
+      metadata: Metadata.fromFields(fields.slice(2, 4)),
+      storage: Storage.fromFields(fields.slice(4, 6)),
+      expiry: UInt64.fromFields(fields.slice(6)),
+    });
   }
 }
 
 export class DomainName extends Struct({
   name: Field,
-  address: PublicKey,
-  metadata: Metadata,
-  storage: Storage,
-  expiry: Field,
+  data: DomainNameValue,
 }) {
   toFields(): Field[] {
-    return [
-      this.name,
-      ...this.address.toFields(),
-      ...this.metadata.toFields(),
-      ...this.storage.toFields(),
-      this.expiry,
-    ];
+    return [this.name, ...this.data.toFields()];
   }
 
   static fromFields(fields: Field[]): DomainName {
     return new DomainName({
       name: fields[0],
-      address: PublicKey.fromFields(fields.slice(1, 3)),
-      metadata: Metadata.fromFields(fields.slice(3, 5)),
-      storage: Storage.fromFields(fields.slice(5)),
-      expiry: fields[fields.length - 1],
+      data: DomainNameValue.fromFields(fields.slice(1)),
     });
   }
 
   value(): Field {
-    return new DomainNameValue({
-      address: this.address,
-      metadata: this.metadata,
-      storage: this.storage,
-      expiry: this.expiry,
-    }).hash();
+    return this.data.hash();
   }
 
   key(): Field {
@@ -108,15 +108,7 @@ class MapTransition extends Struct({
     const key = domain.name;
     key.assertEquals(update.key);
 
-    const value = Poseidon.hashPacked(
-      DomainNameValue,
-      new DomainNameValue({
-        address: domain.address,
-        metadata: domain.metadata,
-        storage: domain.storage,
-        expiry: domain.expiry,
-      })
-    );
+    const value = Poseidon.hashPacked(DomainNameValue, domain.data);
     value.assertEquals(update.newValue);
 
     const [dataWitnessRootBefore, dataWitnessKey] =

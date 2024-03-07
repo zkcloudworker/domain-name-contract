@@ -1,24 +1,32 @@
-import { PrivateKey } from "o1js";
+import { PrivateKey, PublicKey } from "o1js";
 
 interface ContractConfig {
   contractPrivateKey: PrivateKey;
   contractAddress: string;
   ownerPrivateKey: PrivateKey;
+  firstBlockPrivateKey?: PrivateKey;
+  firstBlockPublicKey?: PublicKey;
 }
 
 export const nameContract: ContractConfig = {
   contractPrivateKey: PrivateKey.fromBase58(
-    "EKEpSiV7GCqidsaXsnhUFEE1qHYLsNvpPqx6fWXfAPDrdPoNrE7f"
+    "EKFYqSKXWHWVX7MyTE5o2yXfpfJ2iPmY26CoKcbKd4cBEYngqc6u"
   ),
-  contractAddress: "B62qmWinDr5Z6mNTLhrmYJaVpT5VkAvzPj2yNMpgvZW2tG7ecVcNAME",
+  contractAddress: "B62qm6vHKPPLAMSitQcNMEUTbJAq1VeLzdnVHBvUKhADwezsD7hNAME",
   ownerPrivateKey: PrivateKey.fromBase58(
     "EKFRg9MugtXvFPe4N6Au28kQyYx9txt4CVPgBPRYdv4wvbKBJpEy"
+  ),
+  firstBlockPrivateKey: PrivateKey.fromBase58(
+    "EKDjCdQMYuc6F3XRRSmCaWYH1WiMUXHHQkvzgKBp9NnhA9PHGXwf"
+  ),
+  firstBlockPublicKey: PublicKey.fromBase58(
+    "B62qpRmnH6SU4hZ9Z9JLm877SUaHSahFhu1nTwiPzJgmsZ2AsMnNAME"
   ),
 };
 
 export const validatorsPrivateKeys: PrivateKey[] = [
   PrivateKey.fromBase58("EKEdPmiFqHFXWdW2PSdEm3R2DbNrYX2JCZUW7ohkM5yfoGhMDX9b"),
-  PrivateKey.fromBase58("EKDnzzMz49eFxsqFt3FFmy6b933sJ9tUWuMEcfew241pzwPxk3aW"),
+  //PrivateKey.fromBase58("EKDnzzMz49eFxsqFt3FFmy6b933sJ9tUWuMEcfew241pzwPxk3aW"),
 ];
 
 export const JWT =
