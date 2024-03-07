@@ -17,20 +17,15 @@ import {
   AccountUpdate,
   VerificationKey,
   Poseidon,
+  MerkleMap,
 } from "o1js";
 
 import { Storage } from "./storage";
 import {
+  ValidatorDecisionExtraData,
   ValidatorDecisionType,
   ValidatorsVotingProof,
 } from "../rollup/validators";
-import { stringToFields } from "../lib/hash";
-
-const setValidators: ValidatorDecisionType = "setValidators";
-const setValidatorsField = stringToFields(setValidators)[0];
-
-const createBlock: ValidatorDecisionType = "createBlock";
-const createBlockField = stringToFields(createBlock)[0];
 
 export class NewBlockData extends Struct({
   keys: Field,
@@ -44,7 +39,6 @@ export class NewBlockData extends Struct({
     return Poseidon.hashPacked(NewBlockData, this);
   }
 }
-
 export class BlockData extends Struct({
   newData: NewBlockData,
   root: Field,
@@ -71,10 +65,35 @@ export class BlockData extends Struct({
     ];
   }
 }
-export class BlockEvent extends Struct({
+export class NewBlockEvent extends Struct({
   root: Field,
-  data: BlockData,
+  address: PublicKey,
+  storage: Storage,
+  newData: NewBlockData,
   previousBlock: PublicKey,
+}) {}
+
+export class ValidatedBlockEvent extends Struct({
+  root: Field,
+  address: PublicKey,
+  storage: Storage,
+}) {}
+
+export class ProvedBlockEvent extends Struct({
+  root: Field,
+  address: PublicKey,
+  storage: Storage,
+}) {}
+
+export class SetValidatorsEvent extends Struct({
+  root: Field,
+  address: PublicKey,
+  storage: Storage,
+}) {}
+
+export class FirstBlockEvent extends Struct({
+  root: Field,
+  address: PublicKey,
 }) {}
 
 export class BlockContract extends SmartContract {
@@ -96,15 +115,36 @@ export class BlockContract extends SmartContract {
   init() {
     super.init();
   }
-  @method validate() {
+  @method validateBlock(data: ValidatorDecisionExtraData, tokenId: Field) {
+    data.verifyBlockValidationData({
+      hash: this.blockData.getAndRequireEquals(),
+      storage: this.storage.getAndRequireEquals(),
+      root: this.root.getAndRequireEquals(),
+    });
+    const block = new BlockContract(
+      this.previousBlock.getAndRequireEquals(),
+      tokenId
+    );
+    // TODO: add error messages for all assertions
+    const isValidatedOrFinal = block.isValidated
+      .get() // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+      .or(block.isFinal.get()); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    isValidatedOrFinal.assertEquals(Bool(true));
     this.isValidated.set(Bool(true));
   }
-  @method invalidate() {
+
+  @method badBlock(tokenId: Field) {
+    const block = new BlockContract(
+      this.previousBlock.getAndRequireEquals(),
+      tokenId
+    );
+    const root = block.root.getAndRequireEquals();
     this.isValidated.set(Bool(false));
     this.isFinal.set(Bool(true));
+    this.root.set(root);
   }
 
-  @method finalize() {
+  @method proveBlock() {
     const isFinal = this.isFinal.getAndRequireEquals();
     isFinal.assertEquals(Bool(false));
     const isValidated = this.isValidated.getAndRequireEquals();
@@ -117,6 +157,7 @@ export class DomainNameContract extends TokenContract {
   @state(Field) domain = State<Field>();
   @state(Field) validators = State<Field>();
   @state(Field) validatorsHash = State<Field>();
+  @state(Field) validatorsRequired = State<Field>();
   @state(PublicKey) lastBlock = State<PublicKey>();
   @state(PublicKey) lastProvedBlock = State<PublicKey>();
 
@@ -130,16 +171,20 @@ export class DomainNameContract extends TokenContract {
 
   init() {
     super.init();
+    this.lastBlock.set(PublicKey.empty());
+    this.lastProvedBlock.set(PublicKey.empty());
   }
 
   @method approveBase(forest: AccountUpdateForest) {
     this.checkZeroBalanceChange(forest);
   }
 
-  // TODO: snapshot, 5 last states in token accounts, reduce updates
-
   events = {
-    block: BlockEvent,
+    firstBlock: FirstBlockEvent,
+    newBlock: NewBlockEvent,
+    validatedBlock: ValidatedBlockEvent,
+    provedBlock: ProvedBlockEvent,
+    setValidators: SetValidatorsEvent,
   };
 
   @method block(
@@ -148,17 +193,24 @@ export class DomainNameContract extends TokenContract {
     data: BlockData,
     verificationKey: VerificationKey
   ) {
-    // TODO: verify expiry of the decision
     this.checkValidatorsDecision(proof);
+    const tokenId = this.deriveTokenId();
     signature
       .verify(proof.publicInput.decision.address, data.toFields())
       .assertEquals(true);
-    proof.publicInput.decision.decision.assertEquals(createBlockField);
-    proof.publicInput.decision.data1.assertEquals(verificationKey.hash);
-    proof.publicInput.decision.data2.assertEquals(
-      Poseidon.hashPacked(PublicKey, data.address)
+    proof.publicInput.decision.decision.assertEquals(
+      ValidatorDecisionType.createBlock
     );
-    const tokenId = this.deriveTokenId();
+    const lastBlock = this.lastBlock.getAndRequireEquals();
+    lastBlock.equals(PublicKey.empty()).assertEquals(Bool(false));
+    const block = new BlockContract(lastBlock, tokenId);
+    const oldRoot = block.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    proof.publicInput.decision.data.verifyBlockCreationData({
+      verificationKey,
+      blockPublicKey: data.address,
+      oldRoot,
+    });
+
     const account = Account(data.address, tokenId);
     const tokenBalance = account.balance.getAndRequireEquals();
     tokenBalance.assertEquals(UInt64.from(0));
@@ -178,7 +230,6 @@ export class DomainNameContract extends TokenContract {
         editState: Permissions.proof(),
       },
     };
-    const lastBlock = this.lastBlock.getAndRequireEquals();
     const state = data.toState(lastBlock);
     update.body.update.appState = [
       { isSome: Bool(true), value: state[0] },
@@ -190,29 +241,95 @@ export class DomainNameContract extends TokenContract {
       { isSome: Bool(true), value: state[6] },
       { isSome: Bool(true), value: state[7] },
     ];
-    const blockEvent = new BlockEvent({
+    const blockEvent = new NewBlockEvent({
       root: data.root,
-      data,
+      address: data.address,
+      storage: data.storage,
+      newData: data.newData,
       previousBlock: lastBlock,
     });
+    this.emitEvent("newBlock", blockEvent);
     this.lastBlock.set(data.address);
-    this.emitEvent("block", blockEvent);
+  }
+
+  @method firstBlock(publicKey: PublicKey) {
+    const lastBlock = this.lastBlock.getAndRequireEquals();
+    lastBlock.equals(PublicKey.empty()).assertEquals(Bool(true));
+    const tokenId = this.deriveTokenId();
+    this.internal.mint({
+      address: publicKey,
+      amount: 1_000_000_000,
+    });
+    const root = new MerkleMap().getRoot();
+    const update = AccountUpdate.createSigned(publicKey, tokenId);
+    update.body.update.appState = [
+      { isSome: Bool(true), value: root },
+      { isSome: Bool(true), value: Field(0) },
+      { isSome: Bool(true), value: Field(0) },
+      { isSome: Bool(true), value: Field(0) },
+      { isSome: Bool(true), value: Field(0) },
+      { isSome: Bool(true), value: Field(0) },
+      { isSome: Bool(true), value: Bool(true).toField() },
+      { isSome: Bool(true), value: Bool(true).toField() },
+    ];
+    this.lastBlock.set(publicKey);
+    this.emitEvent(
+      "firstBlock",
+      new FirstBlockEvent({ root, address: publicKey })
+    );
+  }
+
+  @method validateBlock(proof: ValidatorsVotingProof) {
+    this.checkValidatorsDecision(proof);
+    proof.publicInput.decision.decision.assertEquals(
+      ValidatorDecisionType.validate
+    );
+    const tokenId = this.deriveTokenId();
+    const block = new BlockContract(
+      proof.publicInput.decision.address,
+      tokenId
+    );
+    block.validateBlock(proof.publicInput.decision.data, tokenId);
+  }
+
+  @method badBlock(proof: ValidatorsVotingProof) {
+    this.checkValidatorsDecision(proof);
+    proof.publicInput.decision.decision.assertEquals(
+      ValidatorDecisionType.badBlock
+    );
+    const tokenId = this.deriveTokenId();
+    const block = new BlockContract(
+      proof.publicInput.decision.address,
+      tokenId
+    );
+    block.badBlock(tokenId);
   }
 
   @method setValidators(proof: ValidatorsVotingProof) {
     this.checkValidatorsDecision(proof);
-    proof.publicInput.decision.decision.assertEquals(setValidatorsField);
-    this.validators.set(proof.publicInput.decision.data1);
-    this.validatorsHash.set(proof.publicInput.decision.data2);
+    proof.publicInput.decision.decision.assertEquals(
+      ValidatorDecisionType.setValidators
+    );
+    const oldRoot = this.validators.getAndRequireEquals();
+    const { root, hash } =
+      proof.publicInput.decision.data.verifySetValidatorsData({ oldRoot });
+    const validatorsRequired = this.validatorsRequired.getAndRequireEquals();
+    proof.publicInput.count.assertGreaterThan(validatorsRequired.mul(Field(2)));
+    this.validators.set(root);
+    this.validatorsHash.set(hash);
   }
 
   checkValidatorsDecision(proof: ValidatorsVotingProof) {
+    // TODO: check chainId
+    const timestamp = this.network.timestamp.getAndRequireEquals();
+    timestamp.assertLessThan(proof.publicInput.decision.expiry);
     const validators = this.validators.getAndRequireEquals();
     const validatorsHash = this.validatorsHash.getAndRequireEquals();
     proof.verify();
     proof.publicInput.hash.assertEquals(validatorsHash);
     proof.publicInput.decision.root.assertEquals(validators);
-    proof.publicInput.count.assertGreaterThan(Field(1));
+    const validatorsRequired = this.validatorsRequired.getAndRequireEquals();
+    proof.publicInput.count.assertGreaterThan(validatorsRequired);
     proof.publicInput.decision.contract.assertEquals(this.address);
   }
 }

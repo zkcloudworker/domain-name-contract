@@ -1,5 +1,4 @@
-import { p } from "o1js/dist/node/bindings/crypto/finite-field";
-import { MerkleTree, MerkleWitness } from "../lib/merkle-tree";
+import { MerkleWitness } from "../lib/merkle-tree";
 import {
   Struct,
   Field,
@@ -9,32 +8,119 @@ import {
   Bool,
   Poseidon,
   SelfProof,
+  VerificationKey,
+  UInt64,
 } from "o1js";
+import { stringToFields } from "../lib/hash";
+import { Storage } from "../contract/storage";
 
-export type ValidatorDecisionType =
-  | "validate"
-  | "badBlock"
-  | "createBlock"
-  | "setValidators";
+export const ValidatorDecisionType = {
+  validate: stringToFields("validate")[0],
+  badBlock: stringToFields("badBlock")[0],
+  createBlock: stringToFields("createBlock")[0],
+  setValidators: stringToFields("setValidators")[0],
+};
 
 export class ValidatorWitness extends MerkleWitness(3) {}
 
+export class ValidatorDecisionExtraData extends Struct({
+  data: [Field, Field, Field],
+}) {
+  public toFields(): Field[] {
+    return this.data;
+  }
+  static fromBlockCreationData(params: {
+    verificationKey: VerificationKey;
+    blockPublicKey: PublicKey;
+    oldRoot: Field;
+  }) {
+    const { verificationKey, blockPublicKey, oldRoot } = params;
+    return new ValidatorDecisionExtraData({
+      data: [
+        verificationKey.hash,
+        Poseidon.hashPacked(PublicKey, blockPublicKey),
+        oldRoot,
+      ],
+    });
+  }
+
+  verifyBlockCreationData(params: {
+    verificationKey: VerificationKey;
+    blockPublicKey: PublicKey;
+    oldRoot: Field;
+  }) {
+    const { verificationKey, blockPublicKey, oldRoot } = params;
+    this.data[0].assertEquals(verificationKey.hash);
+    this.data[1].assertEquals(Poseidon.hashPacked(PublicKey, blockPublicKey));
+    this.data[2].assertEquals(oldRoot);
+  }
+
+  static fromBlockValidationData(params: {
+    storage: Storage;
+    hash: Field;
+    root: Field;
+  }) {
+    const { storage, hash, root } = params;
+    return new ValidatorDecisionExtraData({
+      data: [root, hash, Poseidon.hashPacked(Storage, storage)],
+    });
+  }
+
+  verifyBlockValidationData(params: {
+    storage: Storage;
+    hash: Field;
+    root: Field;
+  }) {
+    const { storage, hash, root } = params;
+    this.data[0].assertEquals(root);
+    this.data[1].assertEquals(hash);
+    this.data[2].assertEquals(Poseidon.hashPacked(Storage, storage));
+  }
+
+  static fromSetValidatorsData(params: {
+    root: Field;
+    hash: Field;
+    oldRoot: Field;
+  }) {
+    const { root, hash, oldRoot } = params;
+    return new ValidatorDecisionExtraData({
+      data: [root, hash, oldRoot],
+    });
+  }
+
+  verifySetValidatorsData(params: { oldRoot: Field }) {
+    this.data[2].assertEquals(params.oldRoot);
+    return { root: this.data[0], hash: this.data[1] };
+  }
+
+  static assertEquals(
+    a: ValidatorDecisionExtraData,
+    b: ValidatorDecisionExtraData
+  ) {
+    a.data[0].assertEquals(b.data[0]);
+    a.data[1].assertEquals(b.data[1]);
+    a.data[2].assertEquals(b.data[2]);
+  }
+}
+
 export class ValidatorsDecision extends Struct({
   contract: PublicKey,
+  chainId: Field, // chain id
   root: Field,
   decision: Field,
   address: PublicKey,
-  data1: Field,
-  data2: Field,
+  data: ValidatorDecisionExtraData,
+  expiry: UInt64, // Unix time when decision expires
 }) {
   public toFields() {
     return [
       ...this.contract.toFields(),
+      this.chainId,
       this.root,
       this.decision,
       ...this.address.toFields(),
-      this.data1,
-      this.data2,
+      ...this.data.toFields(),
+      ...this.expiry.toFields(),
     ];
   }
 
@@ -43,8 +129,7 @@ export class ValidatorsDecision extends Struct({
     a.root.assertEquals(b.root);
     a.decision.assertEquals(b.decision);
     a.address.assertEquals(b.address);
-    a.data1.assertEquals(b.data1);
-    a.data2.assertEquals(b.data2);
+    ValidatorDecisionExtraData.assertEquals(a.data, b.data);
   }
 }
 

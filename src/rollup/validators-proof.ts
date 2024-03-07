@@ -1,5 +1,11 @@
-import { describe, expect, it } from "@jest/globals";
-import { Field, Poseidon, PublicKey, Signature, VerificationKey } from "o1js";
+import {
+  Field,
+  Poseidon,
+  PublicKey,
+  Signature,
+  VerificationKey,
+  verify,
+} from "o1js";
 import { validatorsPrivateKeys } from "../config";
 import {
   ValidatorsDecision,
@@ -21,16 +27,17 @@ export function getValidatorsTreeAndHash() {
   }
   return { tree, totalHash };
 }
-export async function calculateProof(
+export async function calculateValidatorsProof(
   decision: ValidatorsDecision,
-  verificationKey: VerificationKey
+  verificationKey: VerificationKey,
+  verbose: boolean = false
 ) {
   const validators = validatorsPrivateKeys.map((key) => key.toPublicKey());
   const { tree, totalHash } = getValidatorsTreeAndHash();
 
   const proofs: ValidatorsVotingProof[] = [];
   for (let i = 0; i < validators.length; i++) {
-    console.log("proof", i);
+    if (verbose) console.log("proof", i);
     const signature = Signature.create(
       validatorsPrivateKeys[i],
       decision.toFields()
@@ -53,13 +60,18 @@ export async function calculateProof(
   }
   let proof = proofs[0];
   for (let i = 1; i < proofs.length; i++) {
-    console.log("merge", i);
+    if (verbose) console.log("merge", i);
     const state = ValidatorsDecisionState.merge(
       proof.publicInput,
       proofs[i].publicInput
     );
     const mergedProof = await ValidatorsVoting.merge(state, proof, proofs[i]);
     proof = mergedProof;
+    const ok = await verify(mergedProof.toJSON(), verificationKey);
+    if (verbose) console.log("proof verified:", ok);
+    if (!ok) {
+      throw new Error("calculateValidatorsProof: Proof is not valid");
+    }
   }
   return proof;
 }

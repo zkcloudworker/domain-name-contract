@@ -12,10 +12,13 @@ import {
   AccountUpdate,
   Account,
   VerificationKey,
+  UInt64,
+  MerkleMap,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
   ValidatorsDecision,
+  ValidatorDecisionExtraData,
   ValidatorsDecisionState,
   ValidatorsVoting,
   ValidatorsVotingProof,
@@ -35,11 +38,10 @@ import {
   calculateProof,
 } from "../src/rollup/validators-proof";
 import { Storage } from "../src/contract/storage";
+import { nameContract } from "../src/config";
 
-const setValidators: ValidatorDecisionType = "setValidators";
-const setValidatorsField = stringToFields(setValidators)[0];
-const createBlock: ValidatorDecisionType = "createBlock";
-const createBlockField = stringToFields(createBlock)[0];
+setNumberOfWorkers(8);
+
 const { tree, totalHash } = getValidatorsTreeAndHash();
 const validators = validatorsPrivateKeys.map((key) => key.toPublicKey());
 const root = tree.getRoot();
@@ -55,9 +57,41 @@ let blockVerificationKey: VerificationKey;
 
 describe("Validators", () => {
   it(`should compile and deploy contract`, async () => {
+    console.time("methods analyzed");
+    const methods = [
+      {
+        name: "DomainNameContract",
+        result: DomainNameContract.analyzeMethods(),
+      },
+      { name: "BlockContract", result: BlockContract.analyzeMethods() },
+      {
+        name: "ValidatorsVoting",
+        result: ValidatorsVoting.analyzeMethods(),
+        skip: true,
+      },
+    ];
+    console.timeEnd("methods analyzed");
+    const maxRows = 2 ** 16;
+    for (const contract of methods) {
+      // calculate the size of the contract - the sum or rows for each method
+      const size = Object.values(contract.result).reduce(
+        (acc, method) => acc + method.rows,
+        0
+      );
+      // calculate percentage rounded to 0 decimal places
+      const percentage = Math.round((size / maxRows) * 100);
+
+      console.log(
+        `method's total size for a ${contract.name} is ${size} rows (${percentage}% of max ${maxRows} rows)`
+      );
+      if (contract.skip !== true)
+        for (const method in contract.result) {
+          console.log(method, `rows:`, (contract.result as any)[method].rows);
+        }
+    }
+
     console.time("compiled");
     console.log("Compiling contracts...");
-    setNumberOfWorkers(8);
     verificationKey = (await ValidatorsVoting.compile()).verificationKey;
     blockVerificationKey = (await BlockContract.compile()).verificationKey;
     await DomainNameContract.compile();
@@ -71,6 +105,13 @@ describe("Validators", () => {
     });
 
     await tx.sign([deployer, privateKey]).send();
+
+    const tx2 = await Mina.transaction({ sender }, () => {
+      AccountUpdate.fundNewAccount(sender);
+      zkApp.firstBlock(nameContract.firstBlockPublicKey!);
+    });
+    await tx2.prove();
+    await tx2.sign([deployer, nameContract.firstBlockPrivateKey!]).send();
   });
 
   it(`should create block`, async () => {
@@ -81,11 +122,16 @@ describe("Validators", () => {
 
     const decision = new ValidatorsDecision({
       contract: publicKey,
+      chainId: Field(1),
       root,
-      decision: createBlockField,
+      decision: ValidatorDecisionType.createBlock,
       address: blockProducerPublicKey,
-      data1: blockVerificationKey.hash,
-      data2: Poseidon.hashPacked(PublicKey, blockPublicKey),
+      data: ValidatorDecisionExtraData.fromBlockCreationData({
+        verificationKey: blockVerificationKey,
+        blockPublicKey,
+        oldRoot: new MerkleMap().getRoot(),
+      }),
+      expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
     });
     const proof: ValidatorsVotingProof = await calculateProof(
       decision,
@@ -125,11 +171,16 @@ describe("Validators", () => {
   it(`should change validators`, async () => {
     const decision = new ValidatorsDecision({
       contract: publicKey,
+      chainId: Field(1),
       root,
-      decision: setValidatorsField,
+      decision: ValidatorDecisionType.setValidators,
       address: PrivateKey.random().toPublicKey(),
-      data1: Field(1),
-      data2: Field(1),
+      data: ValidatorDecisionExtraData.fromSetValidatorsData({
+        root: Field(1),
+        hash: Field(1),
+        oldRoot: tree.getRoot(),
+      }),
+      expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
     });
     const proof: ValidatorsVotingProof = await calculateProof(
       decision,
