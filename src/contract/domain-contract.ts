@@ -18,6 +18,8 @@ import {
   VerificationKey,
   Poseidon,
   MerkleMap,
+  Mina,
+  CircuitString,
 } from "o1js";
 import { chainId } from "../rollup/chainid";
 import { Storage } from "./storage";
@@ -175,10 +177,11 @@ export class DomainNameContract extends TokenContract {
     this.lastProvedBlock.set(PublicKey.empty());
   }
 
-  @method approveBase(forest: AccountUpdateForest) {
+  approveBase(forest: AccountUpdateForest) {
     // https://discord.com/channels/484437221055922177/1215258350577647616
     // this.checkZeroBalanceChange(forest);
-    forest.isEmpty().assertEquals(Bool(true));
+    //forest.isEmpty().assertEquals(Bool(true));
+    throw Error("transfers are not allowed");
   }
 
   events = {
@@ -322,9 +325,9 @@ export class DomainNameContract extends TokenContract {
   }
 
   checkValidatorsDecision(proof: ValidatorsVotingProof) {
-    // TODO: change chainId.berkeley to chainId.mainnet when deploying to mainnet
     // see https://discord.com/channels/484437221055922177/1215291691364524072
-    proof.publicInput.decision.chainId.assertEquals(chainId.berkeley);
+    const id = CircuitString.fromString(Mina.getNetworkId().toString()).hash();
+    proof.publicInput.decision.chainId.assertEquals(id); //chainId.berkeley);
     const timestamp = this.network.timestamp.getAndRequireEquals();
     timestamp.assertLessThan(proof.publicInput.decision.expiry);
     const validators = this.validators.getAndRequireEquals();

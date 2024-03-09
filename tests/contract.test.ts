@@ -14,6 +14,7 @@ import {
   VerificationKey,
   UInt64,
   MerkleMap,
+  CircuitString,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -46,7 +47,6 @@ import { createBlock } from "../src/rollup/blocks";
 import { chainId } from "../src/rollup/chainid";
 
 setNumberOfWorkers(8);
-const testChainId = chainId.berkeley;
 
 const ELEMENTS_NUMBER = 10;
 const BLOCKS_NUMBER = 3;
@@ -59,6 +59,9 @@ const privateKey = PrivateKey.random();
 const publicKey = privateKey.toPublicKey();
 const Local = Mina.LocalBlockchain();
 Mina.setActiveInstance(Local);
+const testChainId = CircuitString.fromString(
+  Mina.getNetworkId().toString()
+).hash(); //chainId.berkeley;
 const deployer = Local.testAccounts[0].privateKey;
 const sender = deployer.toPublicKey();
 const zkApp = new DomainNameContract(publicKey);
@@ -101,6 +104,9 @@ describe("Validators", () => {
   });
 
   it(`should compile and deploy contract`, async () => {
+    const networkId = Mina.getNetworkId();
+    console.log("Network ID:", networkId);
+    expect(typeof networkId).toBe("string");
     console.time("methods analyzed");
     const methods = [
       {
