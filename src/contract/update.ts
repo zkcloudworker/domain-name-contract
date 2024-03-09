@@ -11,6 +11,7 @@ import {
 } from "o1js";
 import { Metadata } from "./metadata";
 import { Storage } from "./storage";
+import { DomainTransaction } from "../rollup/transaction";
 
 export class DomainNameValue extends Struct({
   address: PublicKey,
@@ -101,7 +102,7 @@ class MapUpdateData extends Struct({
 class MapTransition extends Struct({
   oldRoot: Field,
   newRoot: Field,
-  time: UInt64, // unix time when the transition was created
+  //time: UInt64, // unix time when the transition was created
   hash: Field, // sum of hashes of all the new keys and values of the Map
   count: Field, // number of new keys in the Map
 }) {

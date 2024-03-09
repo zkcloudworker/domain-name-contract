@@ -176,7 +176,9 @@ export class DomainNameContract extends TokenContract {
   }
 
   @method approveBase(forest: AccountUpdateForest) {
-    this.checkZeroBalanceChange(forest);
+    // https://discord.com/channels/484437221055922177/1215258350577647616
+    // this.checkZeroBalanceChange(forest);
+    forest.isEmpty().assertEquals(Bool(true));
   }
 
   events = {
