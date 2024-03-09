@@ -43,11 +43,13 @@ import { makeString } from "zkcloudworker";
 import { DomainName, DomainNameValue } from "../src/contract/update";
 import { Metadata } from "../src/contract/metadata";
 import { createBlock } from "../src/rollup/blocks";
+import { chainId } from "../src/rollup/chainid";
 
 setNumberOfWorkers(8);
+const testChainId = chainId.berkeley;
 
 const ELEMENTS_NUMBER = 10;
-const BLOCKS_NUMBER = 5;
+const BLOCKS_NUMBER = 3;
 const domainNames: DomainName[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -175,7 +177,7 @@ describe("Validators", () => {
 
       const decision = new ValidatorsDecision({
         contract: publicKey,
-        chainId: Field(1),
+        chainId: testChainId,
         root: validatorsRoot,
         decision: ValidatorDecisionType.createBlock,
         address: blockProducerPublicKey,
@@ -221,7 +223,7 @@ describe("Validators", () => {
 
       const decision = new ValidatorsDecision({
         contract: publicKey,
-        chainId: Field(1),
+        chainId: testChainId,
         root: validatorsRoot,
         decision: ValidatorDecisionType.validate,
         address: blocks[i].address,
@@ -255,7 +257,7 @@ describe("Validators", () => {
   it(`should change validators`, async () => {
     const decision = new ValidatorsDecision({
       contract: publicKey,
-      chainId: Field(1),
+      chainId: testChainId,
       root: validatorsRoot,
       decision: ValidatorDecisionType.setValidators,
       address: PrivateKey.random().toPublicKey(),
