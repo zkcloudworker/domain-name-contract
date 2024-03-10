@@ -2,31 +2,23 @@ import { describe, expect, it } from "@jest/globals";
 import {
   Field,
   PrivateKey,
-  Encoding,
-  Poseidon,
   PublicKey,
   Signature,
-  verify,
   setNumberOfWorkers,
   Mina,
   AccountUpdate,
-  Account,
   VerificationKey,
   UInt64,
   MerkleMap,
-  CircuitString,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
   ValidatorsDecision,
   ValidatorDecisionExtraData,
-  ValidatorsDecisionState,
   ValidatorsVoting,
   ValidatorsVotingProof,
-  ValidatorWitness,
   ValidatorDecisionType,
 } from "../src/rollup/validators";
-import { MerkleTree } from "../src/lib/merkle-tree";
 import {
   DomainNameContract,
   BlockContract,
@@ -40,13 +32,24 @@ import {
 } from "../src/rollup/validators-proof";
 import { Storage } from "../src/contract/storage";
 import { nameContract } from "../src/config";
-import { makeString } from "zkcloudworker";
+import {
+  makeString,
+  initBlockchain,
+  blockchain,
+  getNetworkIdHash,
+  accountBalanceMina,
+} from "zkcloudworker";
 import { DomainName, DomainNameValue } from "../src/contract/update";
 import { Metadata } from "../src/contract/metadata";
 import { createBlock } from "../src/rollup/blocks";
-import { chainId } from "../src/rollup/chainid";
 
 setNumberOfWorkers(8);
+const network: blockchain = "local";
+//const Local = Mina.LocalBlockchain();
+//Mina.setActiveInstance(Local);
+//const deployer = Local.testAccounts[0].privateKey;
+const { keys, networkIdHash } = initBlockchain(network, 1);
+const { privateKey: deployer, publicKey: sender } = keys[0];
 
 const ELEMENTS_NUMBER = 10;
 const BLOCKS_NUMBER = 3;
@@ -57,13 +60,7 @@ const validators = validatorsPrivateKeys.map((key) => key.toPublicKey());
 const validatorsRoot = tree.getRoot();
 const privateKey = PrivateKey.random();
 const publicKey = privateKey.toPublicKey();
-const Local = Mina.LocalBlockchain();
-Mina.setActiveInstance(Local);
-const testChainId = CircuitString.fromString(
-  Mina.getNetworkId().toString()
-).hash(); //chainId.berkeley;
-const deployer = Local.testAccounts[0].privateKey;
-const sender = deployer.toPublicKey();
+
 const zkApp = new DomainNameContract(publicKey);
 let verificationKey: VerificationKey;
 let blockVerificationKey: VerificationKey;
@@ -106,7 +103,17 @@ describe("Validators", () => {
   it(`should compile and deploy contract`, async () => {
     const networkId = Mina.getNetworkId();
     console.log("Network ID:", networkId);
-    expect(typeof networkId).toBe("string");
+    const networkIdHash = getNetworkIdHash();
+    console.log("Network ID hash:", networkIdHash.toJSON());
+    console.log("sender", sender.toBase58());
+    console.log("Sender balance", await accountBalanceMina(sender));
+    expect(deployer).toBeDefined();
+    expect(sender).toBeDefined();
+    expect(deployer.toPublicKey().toBase58()).toBe(sender.toBase58());
+    //expect(typeof networkId).toBe("object");
+    //if (typeof networkId !== "object")
+    //  throw new Error("networkId is not an object");
+    //expect(networkId.custom).toBe(network);
     console.time("methods analyzed");
     const methods = [
       {
@@ -183,7 +190,7 @@ describe("Validators", () => {
 
       const decision = new ValidatorsDecision({
         contract: publicKey,
-        chainId: testChainId,
+        chainId: networkIdHash,
         root: validatorsRoot,
         decision: ValidatorDecisionType.createBlock,
         address: blockProducerPublicKey,
@@ -229,7 +236,7 @@ describe("Validators", () => {
 
       const decision = new ValidatorsDecision({
         contract: publicKey,
-        chainId: testChainId,
+        chainId: networkIdHash,
         root: validatorsRoot,
         decision: ValidatorDecisionType.validate,
         address: blocks[i].address,
@@ -263,7 +270,7 @@ describe("Validators", () => {
   it(`should change validators`, async () => {
     const decision = new ValidatorsDecision({
       contract: publicKey,
-      chainId: testChainId,
+      chainId: networkIdHash,
       root: validatorsRoot,
       decision: ValidatorDecisionType.setValidators,
       address: PrivateKey.random().toPublicKey(),
