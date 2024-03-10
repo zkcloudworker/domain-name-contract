@@ -21,7 +21,7 @@ import {
   Mina,
   CircuitString,
 } from "o1js";
-import { chainId } from "../rollup/chainid";
+import { getNetworkIdHash } from "zkcloudworker";
 import { Storage } from "./storage";
 import {
   ValidatorDecisionExtraData,
@@ -326,8 +326,8 @@ export class DomainNameContract extends TokenContract {
 
   checkValidatorsDecision(proof: ValidatorsVotingProof) {
     // see https://discord.com/channels/484437221055922177/1215291691364524072
-    const id = CircuitString.fromString(Mina.getNetworkId().toString()).hash();
-    proof.publicInput.decision.chainId.assertEquals(id); //chainId.berkeley);
+    const id = getNetworkIdHash();
+    proof.publicInput.decision.chainId.assertEquals(id);
     const timestamp = this.network.timestamp.getAndRequireEquals();
     timestamp.assertLessThan(proof.publicInput.decision.expiry);
     const validators = this.validators.getAndRequireEquals();
