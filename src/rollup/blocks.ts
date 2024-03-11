@@ -1,48 +1,37 @@
-import { MerkleMap, MerkleTree, Field } from "o1js";
-import { FastMerkleTree, MerkleNode } from "../lib/fast-merkle-tree";
+import { MerkleMap, Field } from "o1js";
 
-import {
-  BlockCalculation,
-  BlockCalculationProof,
-  Block,
-  BlockMerkleTreeWitness,
-} from "./proof";
+import { NewBlockTransactions } from "../contract/domain-contract";
+import { DomainTransactionData } from "./transaction";
 
-import { NewBlockData } from "../contract/domain-contract";
-import { DomainName } from "../contract/update";
-
-export const TREE_HEIGHT = 20;
-
-export interface BlockElement {
-  key: Field;
-  value: Field;
-}
-
-export function createBlock(elements: DomainName[], map: MerkleMap) {
-  const keys = new FastMerkleTree(TREE_HEIGHT);
-  const values = new FastMerkleTree(TREE_HEIGHT);
+export function createBlock(elements: DomainTransactionData[], map: MerkleMap) {
   const count = elements.length;
   const oldRoot = map.getRoot();
+  let hashSum = Field(0);
   for (let i = 0; i < count; i++) {
-    const key = elements[i].key();
-    const value = elements[i].value();
-    keys.setLeaf(BigInt(i), key);
-    values.setLeaf(BigInt(i), value);
+    const domain = elements[i].tx.domain;
+    const key = domain.key();
+    const value = domain.value();
+    const hash = elements[i].tx.hash();
+    hashSum = hashSum.add(hash);
     map.set(key, value);
   }
   const root = map.getRoot();
   return {
     oldRoot,
     root,
-    newBlockData: new NewBlockData({
-      keys: keys.getRoot(),
-      values: values.getRoot(),
+    txs: new NewBlockTransactions({
+      value: hashSum,
       count: Field(count),
     }),
   };
 }
 
 /*
+export interface BlockElement {
+  key: Field;
+  value: Field;
+}
+
 export async function addBlock(
   blocks: Field[],
   elements: BlockElement[],

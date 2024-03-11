@@ -23,7 +23,7 @@ import {
   DomainNameContract,
   BlockContract,
   BlockData,
-  NewBlockData,
+  NewBlockTransactions,
 } from "../src/contract/domain-contract";
 import { stringToFields } from "../src/lib/hash";
 import {
@@ -39,7 +39,14 @@ import {
   getNetworkIdHash,
   accountBalanceMina,
 } from "zkcloudworker";
-import { DomainName, DomainNameValue } from "../src/contract/update";
+import {
+  DomainName,
+  DomainNameValue,
+  DomainTransaction,
+  DomainTransactionData,
+  DomainTransactionEnum,
+  MapUpdate,
+} from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
 import { createBlock } from "../src/rollup/blocks";
 
@@ -53,7 +60,7 @@ const { privateKey: deployer, publicKey: sender } = keys[0];
 
 const ELEMENTS_NUMBER = 10;
 const BLOCKS_NUMBER = 3;
-const domainNames: DomainName[][] = [];
+const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
 const validators = validatorsPrivateKeys.map((key) => key.toPublicKey());
@@ -64,12 +71,13 @@ const publicKey = privateKey.toPublicKey();
 const zkApp = new DomainNameContract(publicKey);
 let verificationKey: VerificationKey;
 let blockVerificationKey: VerificationKey;
+let mapVerificationKey: VerificationKey;
 const storage = new Storage({ hashString: [Field(0), Field(0)] });
 const map = new MerkleMap();
 
 interface Block {
   address: PublicKey;
-  newBlockData: NewBlockData;
+  txs: NewBlockTransactions;
   root: Field;
   storage: Storage;
 }
@@ -79,7 +87,7 @@ describe("Validators", () => {
   it(`should prepare blocks data`, async () => {
     console.time(`prepared data`);
     for (let j = 0; j < BLOCKS_NUMBER; j++) {
-      const blockElements: DomainName[] = [];
+      const blockElements: DomainTransactionData[] = [];
       for (let i = 0; i < ELEMENTS_NUMBER; i++) {
         const domainName: DomainName = new DomainName({
           name: stringToFields(makeString(20))[0],
@@ -93,7 +101,14 @@ describe("Validators", () => {
             expiry: UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 365),
           }),
         });
-        blockElements.push(domainName);
+        const domainTransaction: DomainTransaction = new DomainTransaction({
+          type: DomainTransactionEnum.add,
+          domain: domainName,
+        });
+        const domainTransactionData: DomainTransactionData = {
+          tx: domainTransaction,
+        } as DomainTransactionData;
+        blockElements.push(domainTransactionData);
       }
       domainNames.push(blockElements);
     }
@@ -114,6 +129,7 @@ describe("Validators", () => {
     //if (typeof networkId !== "object")
     //  throw new Error("networkId is not an object");
     //expect(networkId.custom).toBe(network);
+
     console.time("methods analyzed");
     const methods = [
       {
@@ -124,6 +140,11 @@ describe("Validators", () => {
       {
         name: "ValidatorsVoting",
         result: ValidatorsVoting.analyzeMethods(),
+        skip: true,
+      },
+      {
+        name: "MapUpdate",
+        result: MapUpdate.analyzeMethods(),
         skip: true,
       },
     ];
@@ -151,6 +172,7 @@ describe("Validators", () => {
     console.log("Compiling contracts...");
     verificationKey = (await ValidatorsVoting.compile()).verificationKey;
     blockVerificationKey = (await BlockContract.compile()).verificationKey;
+    mapVerificationKey = (await MapUpdate.compile()).verificationKey;
     await DomainNameContract.compile();
     console.timeEnd("compiled");
 
@@ -179,11 +201,11 @@ describe("Validators", () => {
       const blockProducerPrivateKey = PrivateKey.random();
       const blockProducerPublicKey = blockProducerPrivateKey.toPublicKey();
 
-      const { root, oldRoot, newBlockData } = createBlock(domainNames[i], map);
+      const { root, oldRoot, txs } = createBlock(domainNames[i], map);
 
       blocks.push({
         address: blockPublicKey,
-        newBlockData,
+        txs,
         root,
         storage,
       });
@@ -214,7 +236,7 @@ describe("Validators", () => {
         address: blockPublicKey,
         root,
         storage: storage,
-        newData: newBlockData,
+        txs,
       });
       const signature = Signature.create(
         blockProducerPrivateKey,
@@ -242,7 +264,7 @@ describe("Validators", () => {
         address: blocks[i].address,
         data: ValidatorDecisionExtraData.fromBlockValidationData({
           storage: blocks[i].storage,
-          hash: blocks[i].newBlockData.hash(),
+          hash: blocks[i].txs.hash(),
           root: blocks[i].root,
         }),
         expiry: UInt64.from(Date.now() + 1000 * 60 * 60),

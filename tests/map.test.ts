@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import { makeString } from "zkcloudworker";
 import { Field, PrivateKey, Encoding } from "o1js";
-import { DomainName } from "../src/contract/update";
+import { DomainName } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
 import { Storage } from "../src/contract/storage";
 import { MerkleTree } from "../src/lib/merkle-tree";

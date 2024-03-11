@@ -14,7 +14,7 @@ import {
 } from "o1js";
 import { TREE_HEIGHT, addBlock, BlockElement } from "../src/rollup/blocks";
 import { BlockCalculation, BlockCalculationProof } from "../src/rollup/proof";
-import { MapUpdate, DomainName } from "../src/contract/update";
+import { MapUpdate, DomainName } from "../src/rollup/transaction";
 import { Storage } from "../src/contract/storage";
 import { Metadata } from "../src/contract/metadata";
 import { calculateProof } from "../src/contract/proof";
