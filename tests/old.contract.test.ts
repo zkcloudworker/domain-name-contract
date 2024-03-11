@@ -22,7 +22,11 @@ import {
   BATCH_SIZE,
 } from "../src/contract/domain-contract";
 import { stringToFields } from "../src/lib/hash";
-import { MapUpdateProof, MapUpdate, DomainName } from "../src/contract/update";
+import {
+  MapUpdateProof,
+  MapUpdate,
+  DomainName,
+} from "../src/rollup/transaction";
 import { TREE_HEIGHT, addBlock, BlockElement } from "../src/rollup/blocks";
 import { BlockCalculation } from "../src/rollup/proof";
 import { calculateProof } from "../src/contract/proof";

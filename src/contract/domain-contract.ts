@@ -28,28 +28,28 @@ import {
   ValidatorDecisionType,
   ValidatorsVotingProof,
 } from "../rollup/validators";
+import { MapUpdateProof, MapTransition } from "../rollup/transaction";
 
-export class NewBlockData extends Struct({
-  keys: Field,
-  values: Field,
-  count: Field,
+export class NewBlockTransactions extends Struct({
+  value: Field, // sum of the hashes of all transactions
+  count: Field, // number of transactions
 }) {
   toFields() {
-    return [this.keys, this.values, this.count];
+    return [this.value, this.count];
   }
   hash() {
-    return Poseidon.hashPacked(NewBlockData, this);
+    return Poseidon.hashPacked(NewBlockTransactions, this);
   }
 }
 export class BlockData extends Struct({
-  newData: NewBlockData,
+  txs: NewBlockTransactions,
   root: Field,
   storage: Storage,
   address: PublicKey,
 }) {
   toFields() {
     return [
-      ...this.newData.toFields(),
+      ...this.txs.toFields(),
       this.root,
       ...this.storage.toFields(),
       ...this.address.toFields(),
@@ -59,7 +59,7 @@ export class BlockData extends Struct({
   toState(previousBlock: PublicKey): Field[] {
     return [
       this.root,
-      this.newData.hash(),
+      this.txs.hash(),
       ...previousBlock.toFields(),
       ...this.storage.toFields(),
       Bool(false).toField(),
@@ -71,7 +71,7 @@ export class NewBlockEvent extends Struct({
   root: Field,
   address: PublicKey,
   storage: Storage,
-  newData: NewBlockData,
+  txs: NewBlockTransactions,
   previousBlock: PublicKey,
 }) {}
 
@@ -100,7 +100,7 @@ export class FirstBlockEvent extends Struct({
 
 export class BlockContract extends SmartContract {
   @state(Field) root = State<Field>();
-  @state(Field) blockData = State<Field>();
+  @state(Field) txs = State<Field>();
   @state(PublicKey) previousBlock = State<PublicKey>();
   @state(Storage) storage = State<Storage>();
   @state(Bool) isFinal = State<Bool>();
@@ -119,7 +119,7 @@ export class BlockContract extends SmartContract {
   }
   @method validateBlock(data: ValidatorDecisionExtraData, tokenId: Field) {
     data.verifyBlockValidationData({
-      hash: this.blockData.getAndRequireEquals(),
+      hash: this.txs.getAndRequireEquals(),
       storage: this.storage.getAndRequireEquals(),
       root: this.root.getAndRequireEquals(),
     });
@@ -136,6 +136,7 @@ export class BlockContract extends SmartContract {
   }
 
   @method badBlock(tokenId: Field) {
+    // TODO: what is going on if the previous block is not final? Add more Bools and pack them into one Field
     const block = new BlockContract(
       this.previousBlock.getAndRequireEquals(),
       tokenId
@@ -146,11 +147,26 @@ export class BlockContract extends SmartContract {
     this.root.set(root);
   }
 
-  @method proveBlock() {
+  @method proveBlock(data: MapTransition, tokenId: Field) {
     const isFinal = this.isFinal.getAndRequireEquals();
     isFinal.assertEquals(Bool(false));
     const isValidated = this.isValidated.getAndRequireEquals();
     isValidated.assertEquals(Bool(true));
+
+    const block = new BlockContract(
+      this.previousBlock.getAndRequireEquals(),
+      tokenId
+    );
+    const root = block.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    root.assertEquals(data.oldRoot);
+    data.newRoot.assertEquals(this.root.getAndRequireEquals());
+    const isPreviousBlockFinal = block.isFinal.get(); // TODO: change to getAndRequireEquals() after o1js bug fix
+    isPreviousBlockFinal.assertEquals(Bool(true));
+    const txs: NewBlockTransactions = new NewBlockTransactions({
+      value: data.hash,
+      count: data.count,
+    });
+    txs.hash().assertEquals(this.txs.getAndRequireEquals());
     this.isFinal.set(Bool(true));
   }
 }
@@ -250,7 +266,7 @@ export class DomainNameContract extends TokenContract {
       root: data.root,
       address: data.address,
       storage: data.storage,
-      newData: data.newData,
+      txs: data.txs,
       previousBlock: lastBlock,
     });
     this.emitEvent("newBlock", blockEvent);
@@ -295,6 +311,15 @@ export class DomainNameContract extends TokenContract {
       tokenId
     );
     block.validateBlock(proof.publicInput.decision.data, tokenId);
+  }
+
+  @method proveBlock(proof: MapUpdateProof, blockAddress: PublicKey) {
+    const timestamp = this.network.timestamp.getAndRequireEquals();
+    timestamp.assertGreaterThan(proof.publicInput.time);
+    proof.verify();
+    const tokenId = this.deriveTokenId();
+    const block = new BlockContract(blockAddress, tokenId);
+    //block.proveBlock(proof.publicInput, tokenId);
   }
 
   @method badBlock(proof: ValidatorsVotingProof) {

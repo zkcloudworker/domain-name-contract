@@ -10,7 +10,7 @@ import {
 } from "o1js";
 import { initBlockchain, fee, accountBalanceMina } from "zkcloudworker";
 import { DomainNameContract } from "../../src/contract/domain-contract";
-import { MapUpdate } from "../../src/contract/update";
+import { MapUpdate } from "../../src/rollup/transaction";
 import { nameContract, deployer as berkeleyDeployer } from "../../src/config";
 
 const useLocalBlockchain = true;

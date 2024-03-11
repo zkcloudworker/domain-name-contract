@@ -1,73 +1,96 @@
-import { Field, MerkleMap, verify, VerificationKey, MerkleTree } from "o1js";
-import { DomainNameAction } from "./domain-contract";
+import {
+  Field,
+  MerkleMap,
+  verify,
+  VerificationKey,
+  MerkleTree,
+  UInt64,
+} from "o1js";
 import {
   MapUpdateData,
   MapTransition,
   MapUpdateProof,
   MapUpdate,
   DomainName,
-} from "./update";
+  DomainTransactionData,
+  DomainTransactionType,
+} from "../rollup/transaction";
 import { Memory } from "../lib/memory";
-import {
-  BlockCalculation,
-  BlockCalculationProof,
-  Block,
-  BlockMerkleTreeWitness,
-} from "../rollup/proof";
 
-export async function calculateProof(
-  elements: DomainNameAction[],
+export async function calculateTransactionsProof(
+  elements: DomainTransactionData[],
   map: MerkleMap,
-  tree: MerkleTree,
-  block: Field,
-  mapVerificationKey: VerificationKey | undefined,
-  treeVerificationKey: VerificationKey | undefined,
+  verificationKey: VerificationKey | undefined,
   verbose: boolean = false
-): Promise<{ proof: MapUpdateProof; blockProof: BlockCalculationProof }> {
+): Promise<MapUpdateProof> {
   console.log(`Calculating proofs for ${elements.length} elements...`);
-  if (mapVerificationKey === undefined)
-    throw new Error("Map Verification key is not defined");
-  if (treeVerificationKey === undefined)
-    throw new Error("Tree Verification key is not defined");
+  if (verificationKey === undefined)
+    throw new Error("MapUpdate Verification key is not defined");
 
   interface ElementState {
     isElementAccepted: boolean;
     update?: MapUpdateData;
     oldRoot: Field;
+    type: DomainTransactionType;
   }
   let updates: ElementState[] = [];
+  const time = UInt64.from(Date.now());
 
   for (const element of elements) {
     const oldRoot = map.getRoot();
+    const type = element.txType();
     if (isAccepted(element)) {
-      const key = element.domain.key();
-      const value = element.domain.value();
+      const key = element.tx.domain.key();
+      const value = type === "remove" ? Field(0) : element.tx.domain.value();
       map.set(key, value);
       const newRoot = map.getRoot();
       const update = new MapUpdateData({
         oldRoot,
         newRoot,
-        key,
-        oldValue: Field(0),
-        newValue: value,
+        time,
+        tx: element.tx,
         witness: map.getWitness(key),
       });
-      updates.push({ isElementAccepted: true, update, oldRoot });
+      updates.push({ isElementAccepted: true, update, oldRoot, type });
     } else {
-      updates.push({ isElementAccepted: false, oldRoot });
+      updates.push({ isElementAccepted: false, oldRoot, type });
     }
   }
 
   let proofs: MapUpdateProof[] = [];
   for (let i = 0; i < elements.length; i++) {
     const state = updates[i].isElementAccepted
-      ? MapTransition.accept(updates[i].update!, elements[i].domain)
-      : MapTransition.reject(updates[i].oldRoot, elements[i].domain);
+      ? updates[i].type === "add"
+        ? MapTransition.add(updates[i].update!)
+        : updates[i].type === "remove"
+        ? MapTransition.remove(updates[i].update!)
+        : updates[i].type === "update"
+        ? MapTransition.update(
+            updates[i].update!,
+            elements[i].oldDomain!,
+            elements[i].signature!
+          )
+        : MapTransition.extend(updates[i].update!, elements[i].oldDomain!)
+      : MapTransition.reject(updates[i].oldRoot, time, elements[i].tx);
 
     const proof = updates[i].isElementAccepted
-      ? await MapUpdate.accept(state, updates[i].update!, elements[i].domain)
-      : await MapUpdate.reject(state, updates[i].oldRoot, elements[i].domain);
-    if (i === 0) Memory.info(`Setting base for RSS memory`, false, true);
+      ? updates[i].type === "add"
+        ? await MapUpdate.add(state, updates[i].update!)
+        : updates[i].type === "remove"
+        ? await MapUpdate.remove(state, updates[i].update!)
+        : updates[i].type === "update"
+        ? await MapUpdate.update(
+            state,
+            updates[i].update!,
+            elements[i].oldDomain!,
+            elements[i].signature!
+          )
+        : await MapUpdate.extend(
+            state,
+            updates[i].update!,
+            elements[i].oldDomain!
+          )
+      : await MapUpdate.reject(state, updates[i].oldRoot, time, elements[i].tx);
     proofs.push(proof);
     if (verbose) Memory.info(`Proof ${i + 1}/${elements.length} created`);
   }
@@ -81,37 +104,41 @@ export async function calculateProof(
       proof,
       proofs[i]
     );
-    if (i === 1) Memory.info(`Setting base for RSS memory`, false, true);
     proof = mergedProof;
     if (verbose) Memory.info(`Proof ${i}/${proofs.length - 1} merged`);
   }
 
-  function isAccepted(element: DomainNameAction): boolean {
-    const name = element.domain.name;
-    const value = map.get(name);
-    const isAccepted: boolean = value.equals(Field(0)).toBoolean();
-    return isAccepted;
+  function isAccepted(element: DomainTransactionData): boolean {
+    if (
+      (element.txType() === "update" || element.txType() === "extend") &&
+      element.oldDomain === undefined
+    )
+      return false;
+    if (element.txType() === "update" && element.signature === undefined)
+      return false;
+    if (
+      element.txType() === "extend" &&
+      element.tx.domain.data.expiry
+        .greaterThan(element.oldDomain!.data.expiry)
+        .toBoolean() === false
+    )
+      return false;
+    return true; // TODO: implement
   }
   const verificationResult: boolean = await verify(
     proof.toJSON(),
-    mapVerificationKey
+    verificationKey
   );
 
-  console.log("Proof verification result:", verificationResult);
+  //console.log("Proof verification result:", verificationResult);
   if (verificationResult === false) {
     throw new Error("Proof verification error");
   }
 
-  const blockProof = await calculateBlockProof(
-    tree,
-    block,
-    map.getRoot(),
-    treeVerificationKey
-  );
-
-  return { proof, blockProof };
+  return proof;
 }
 
+/*
 export async function calculateBlockProof(
   tree: MerkleTree,
   block: Field,
@@ -146,7 +173,7 @@ export async function calculateBlockProof(
   return proof;
 }
 
-/*
+
 export async function prepareProofData(
   elements: DomainName[],
   map: MerkleMap

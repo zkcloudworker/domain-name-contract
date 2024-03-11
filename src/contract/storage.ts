@@ -20,6 +20,15 @@ export class Storage extends Struct({
   static fromFields(fields: Field[]): Storage {
     return new Storage({ hashString: [fields[0], fields[1]] });
   }
+
+  static empty(): Storage {
+    return new Storage({ hashString: [Field(0), Field(0)] });
+  }
+
+  static assertEquals(a: Storage, b: Storage) {
+    a.hashString[0].assertEquals(b.hashString[0]);
+    a.hashString[1].assertEquals(b.hashString[1]);
+  }
 }
 
 export async function saveToIPFS(
