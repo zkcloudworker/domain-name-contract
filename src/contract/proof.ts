@@ -34,14 +34,15 @@ export async function calculateTransactionsProof(
     type: DomainTransactionType;
   }
   let updates: ElementState[] = [];
-  const time = UInt64.from(Date.now());
+  const time = UInt64.from(Date.now() - 1000 * 60 * 60 * 10);
 
   for (const element of elements) {
     const oldRoot = map.getRoot();
-    const type = element.txType();
+    const txType = element.txType();
+    //console.log(`Calculating proof data for ${txType} ...`);
     if (isAccepted(element)) {
       const key = element.tx.domain.key();
-      const value = type === "remove" ? Field(0) : element.tx.domain.value();
+      const value = txType === "remove" ? Field(0) : element.tx.domain.value();
       map.set(key, value);
       const newRoot = map.getRoot();
       const update = new MapUpdateData({
@@ -51,9 +52,9 @@ export async function calculateTransactionsProof(
         tx: element.tx,
         witness: map.getWitness(key),
       });
-      updates.push({ isElementAccepted: true, update, oldRoot, type });
+      updates.push({ isElementAccepted: true, update, oldRoot, type: txType });
     } else {
-      updates.push({ isElementAccepted: false, oldRoot, type });
+      updates.push({ isElementAccepted: false, oldRoot, type: txType });
     }
   }
 
@@ -91,12 +92,14 @@ export async function calculateTransactionsProof(
             elements[i].oldDomain!
           )
       : await MapUpdate.reject(state, updates[i].oldRoot, time, elements[i].tx);
+
     proofs.push(proof);
     if (verbose) Memory.info(`Proof ${i + 1}/${elements.length} created`);
   }
 
   console.log("Merging proofs...");
   let proof: MapUpdateProof = proofs[0];
+
   for (let i = 1; i < proofs.length; i++) {
     const state = MapTransition.merge(proof.publicInput, proofs[i].publicInput);
     let mergedProof: MapUpdateProof = await MapUpdate.merge(
@@ -125,6 +128,7 @@ export async function calculateTransactionsProof(
       return false;
     return true; // TODO: implement
   }
+
   const verificationResult: boolean = await verify(
     proof.toJSON(),
     verificationKey

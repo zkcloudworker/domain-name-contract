@@ -10,6 +10,7 @@ import {
   VerificationKey,
   UInt64,
   MerkleMap,
+  MerkleList,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -46,9 +47,11 @@ import {
   DomainTransactionData,
   DomainTransactionEnum,
   MapUpdate,
+  MapUpdateProof,
 } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
 import { createBlock } from "../src/rollup/blocks";
+import { calculateTransactionsProof } from "../src/contract/proof";
 
 setNumberOfWorkers(8);
 const network: blockchain = "local";
@@ -58,8 +61,8 @@ const network: blockchain = "local";
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const ELEMENTS_NUMBER = 10;
-const BLOCKS_NUMBER = 3;
+const ELEMENTS_NUMBER = 3;
+const BLOCKS_NUMBER = 5;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -74,6 +77,7 @@ let blockVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
 const storage = new Storage({ hashString: [Field(0), Field(0)] });
 const map = new MerkleMap();
+const proveMap = new MerkleMap();
 
 interface Block {
   address: PublicKey;
@@ -105,9 +109,8 @@ describe("Validators", () => {
           type: DomainTransactionEnum.add,
           domain: domainName,
         });
-        const domainTransactionData: DomainTransactionData = {
-          tx: domainTransaction,
-        } as DomainTransactionData;
+        const domainTransactionData: DomainTransactionData =
+          new DomainTransactionData(domainTransaction);
         blockElements.push(domainTransactionData);
       }
       domainNames.push(blockElements);
@@ -240,7 +243,7 @@ describe("Validators", () => {
       });
       const signature = Signature.create(
         blockProducerPrivateKey,
-        blockData.toFields()
+        blockData.convertToFields()
       );
 
       const tx = await Mina.transaction({ sender }, () => {
@@ -286,6 +289,25 @@ describe("Validators", () => {
       await tx.prove();
       await tx.sign([deployer]).send();
       console.timeEnd(`block ${i} validated`);
+    });
+
+    it(`should prove a block`, async () => {
+      console.time(`block ${i} proved`);
+
+      const proof: MapUpdateProof = await calculateTransactionsProof(
+        domainNames[i],
+        proveMap,
+        mapVerificationKey,
+        true
+      );
+
+      const tx = await Mina.transaction({ sender }, () => {
+        zkApp.proveBlock(proof, blocks[i].address);
+      });
+
+      await tx.prove();
+      await tx.sign([deployer]).send();
+      console.timeEnd(`block ${i} proved`);
     });
   }
 

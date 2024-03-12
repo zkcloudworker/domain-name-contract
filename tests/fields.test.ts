@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { Field, PrivateKey, Signature } from "o1js";
+import { Field, PrivateKey, PublicKey, Signature, Struct } from "o1js";
 import { serializeFields, deserializeFields } from "../src/lib/fields";
 import {
   DomainName,
@@ -30,21 +30,55 @@ describe("Map", () => {
       expect(fields[i].toJSON()).toEqual(elements[i].toJSON());
     }
   });
+  it(`should convert PublicKey`, async () => {
+    const publicKey = PrivateKey.random().toPublicKey();
+    const json = publicKey.toJSON();
+    const restored = PublicKey.fromJSON(json);
+    expect(restored.equals(publicKey).toBoolean()).toBe(true);
+  });
   it(`should convert DomainTransaction`, async () => {
     const domainName = DomainName.empty();
-    expect(domainName.toFields().length).toBe(8);
-    const signature = Signature.create(PrivateKey.random(), [Field(0)]);
+    expect(domainName.convertToFields().length).toBe(8);
     const tx = new DomainTransaction({
       type: DomainTransactionEnum.add,
       domain: domainName,
     });
-    const s = serializeFields(tx.toFields());
-    console.log(s);
-    const restored = DomainTransaction.fromFields(deserializeFields(s));
-    const tx1 = tx.toFields();
-    console.log(signature.toFields().length);
+    const s = serializeFields(tx.convertToFields());
+    const b = serializeFields(DomainTransaction.toFields(tx));
+    const fields = deserializeFields(s);
+    const restored = DomainTransaction.createFromFields(fields);
+    const restored2 = new DomainTransaction(
+      DomainTransaction.fromFields(fields)
+    );
+    const restored3 = new DomainTransaction(
+      DomainTransaction.fromFields(deserializeFields(b))
+    );
+    const tx1 = tx.convertToFields();
+    const tx2 = restored.convertToFields();
+    const tx3 = restored2.convertToFields();
+    const tx4 = restored3.convertToFields();
+    expect(tx1.length).toBe(tx2.length);
+    for (let i = 0; i < tx1.length; i++) {
+      expect(tx1[i].toJSON()).toEqual(tx2[i].toJSON());
+      expect(tx1[i].toJSON()).toEqual(tx3[i].toJSON());
+      expect(tx1[i].toJSON()).toEqual(tx4[i].toJSON());
+    }
+  });
+  it(`should convert Signature`, async () => {
+    const signature = Signature.create(PrivateKey.random(), [
+      Field(1),
+      Field(2),
+      Field(3),
+      Field(4),
+      Field(5),
+      Field(6),
+      Field(7),
+      Field(8),
+    ]);
+    const s = serializeFields(signature.toFields());
+    const restored = Signature.fromFields(deserializeFields(s));
+    const tx1 = signature.toFields();
     const tx2 = restored.toFields();
-    console.log(tx2.length);
     expect(tx1.length).toBe(tx2.length);
     for (let i = 0; i < tx1.length; i++) {
       expect(tx1[i].toJSON()).toEqual(tx2[i].toJSON());

@@ -27,11 +27,11 @@ export class Block extends Struct({
     });
   }
 
-  public toFields() {
+  public convertToFields() {
     return [this.oldRoot, this.newRoot, this.index, this.value];
   }
 
-  public static fromFields(fields: Field[]) {
+  public static createFromFields(fields: Field[]) {
     return new Block({
       oldRoot: fields[0],
       newRoot: fields[1],

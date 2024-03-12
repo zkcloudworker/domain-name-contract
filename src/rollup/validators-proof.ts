@@ -40,7 +40,7 @@ export async function calculateValidatorsProof(
     if (verbose) console.log("proof", i);
     const signature = Signature.create(
       validatorsPrivateKeys[i],
-      decision.toFields()
+      decision.convertToFields()
     );
     const witness = new ValidatorWitness(tree.getWitness(BigInt(i)));
     const state = ValidatorsDecisionState.vote(
