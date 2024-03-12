@@ -2,20 +2,19 @@ import { describe, expect, it } from "@jest/globals";
 import { Field, Struct, UInt64, ZkProgram, Provable } from "o1js";
 
 class MapTransition extends Struct({
-  time: UInt64,
   value: Field,
 }) {
   static create() {
+    Provable.log("create");
     return new MapTransition({
       value: Field(100),
-      time: UInt64.from(0),
     });
   }
 
-  static fromFields(fields: Field[]): MapTransition {
+  static fromFields1(): MapTransition {
+    Provable.log("fromFields");
     return new MapTransition({
-      value: fields[0],
-      time: UInt64.from(0),
+      value: Field(30),
     });
   }
 }

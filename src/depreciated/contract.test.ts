@@ -253,7 +253,7 @@ describe("Contract", () => {
         //console.log("action", i, actions2[i].actions[0]);
         //console.log("hash", actions2[i].hash);
 
-        const element = DomainNameAction.fromFields(
+        const element = DomainNameAction.createFromFields(
           actions2[i].actions[0].map((f: string) => Field.fromJSON(f))
         );
         expect(element.domain.name.toJSON()).toEqual(
@@ -302,7 +302,7 @@ describe("Contract", () => {
         let hash: Field = Field(0);
         const elements: DomainNameAction[] = [];
         for (let i = 0; i < length; i++) {
-          const element: DomainNameAction = DomainNameAction.fromFields(
+          const element: DomainNameAction = DomainNameAction.createFromFields(
             actions[i].actions[0].map((f: string) => Field.fromJSON(f))
           );
           const calculatedHash = element.domain.hash();

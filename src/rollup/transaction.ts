@@ -25,19 +25,19 @@ export class DomainNameValue extends Struct({
   hash(): Field {
     return Poseidon.hashPacked(DomainNameValue, this);
   }
-  toFields(): Field[] {
+  convertToFields(): Field[] {
     return [
       ...this.address.toFields(),
-      ...this.metadata.toFields(),
-      ...this.storage.toFields(),
+      ...this.metadata.convertToFields(),
+      ...this.storage.convertToFields(),
       ...this.expiry.toFields(),
     ];
   }
-  static fromFields(fields: Field[]): DomainNameValue {
+  static createFromFields(fields: Field[]): DomainNameValue {
     return new DomainNameValue({
       address: PublicKey.fromFields(fields.slice(0, 2)),
-      metadata: Metadata.fromFields(fields.slice(2, 4)),
-      storage: Storage.fromFields(fields.slice(4, 6)),
+      metadata: Metadata.createFromFields(fields.slice(2, 4)),
+      storage: Storage.createFromFields(fields.slice(4, 6)),
       expiry: UInt64.fromFields(fields.slice(6)),
     });
   }
@@ -55,14 +55,14 @@ export class DomainName extends Struct({
   name: Field,
   data: DomainNameValue,
 }) {
-  toFields(): Field[] {
-    return [this.name, ...this.data.toFields()];
+  convertToFields(): Field[] {
+    return [this.name, ...this.data.convertToFields()];
   }
 
-  static fromFields(fields: Field[]): DomainName {
+  static createFromFields(fields: Field[]): DomainName {
     return new DomainName({
       name: fields[0],
-      data: DomainNameValue.fromFields(fields.slice(1)),
+      data: DomainNameValue.createFromFields(fields.slice(1)),
     });
   }
 
@@ -103,15 +103,18 @@ export class DomainTransaction extends Struct({
   type: UInt8,
   domain: DomainName,
 }) {
-  toFields(): Field[] {
-    return [this.type.toUInt32().toFields()[0], ...this.domain.toFields()];
+  convertToFields(): Field[] {
+    return [
+      this.type.toUInt32().toFields()[0],
+      ...this.domain.convertToFields(),
+    ];
   }
 
-  static fromFields(fields: Field[]): DomainTransaction {
+  static createFromFields(fields: Field[]): DomainTransaction {
     fields[0].assertLessThanOrEqual(Field(4));
     return new DomainTransaction({
       type: UInt8.from(fields[0]),
-      domain: DomainName.fromFields(fields.slice(1, 9)),
+      domain: DomainName.createFromFields(fields.slice(1, 9)),
     });
   }
 
@@ -145,22 +148,22 @@ class MapUpdateData extends Struct({
   tx: DomainTransaction,
   witness: MerkleMapWitness,
 }) {
-  toFields(): Field[] {
+  convertToFields(): Field[] {
     return [
       this.oldRoot,
       this.newRoot,
       this.time.toFields()[0],
-      ...this.tx.toFields(),
+      ...this.tx.convertToFields(),
       ...this.witness.toFields(),
     ];
   }
 
-  static fromFields(fields: Field[]): MapUpdateData {
+  static createFromFields(fields: Field[]): MapUpdateData {
     return new MapUpdateData({
       oldRoot: fields[0],
       newRoot: fields[1],
       time: UInt64.from(fields[2]),
-      tx: DomainTransaction.fromFields(fields.slice(3, 12)),
+      tx: DomainTransaction.createFromFields(fields.slice(3, 12)),
       witness: MerkleMapWitness.fromFields(fields.slice(12)),
     });
   }
@@ -218,7 +221,7 @@ class MapTransition extends Struct({
     update.newRoot.assertEquals(rootAfter);
     key.assertEquals(keyAfter);
 
-    signature.verify(oldDomain.data.address, update.tx.toFields());
+    signature.verify(oldDomain.data.address, update.tx.convertToFields());
 
     const hash = update.tx.hash();
 
@@ -315,14 +318,14 @@ class MapTransition extends Struct({
   }
 
   static assertEquals(transition1: MapTransition, transition2: MapTransition) {
-    //transition1.oldRoot.assertEquals(transition2.oldRoot);
-    //transition1.newRoot.assertEquals(transition2.newRoot);
-    //transition1.hash.assertEquals(transition2.hash);
-    //transition1.count.assertEquals(transition2.count);
-    //transition1.time.assertEquals(transition2.time);
+    transition1.oldRoot.assertEquals(transition2.oldRoot);
+    transition1.newRoot.assertEquals(transition2.newRoot);
+    transition1.hash.assertEquals(transition2.hash);
+    transition1.count.assertEquals(transition2.count);
+    transition1.time.assertEquals(transition2.time);
   }
 
-  toFields(): Field[] {
+  convertToFields(): Field[] {
     return [
       this.oldRoot,
       this.newRoot,
@@ -332,7 +335,7 @@ class MapTransition extends Struct({
     ];
   }
 
-  static fromFields(fields: Field[]): MapTransition {
+  static createFromFields(fields: Field[]): MapTransition {
     return new MapTransition({
       oldRoot: fields[0],
       newRoot: fields[1],
@@ -349,17 +352,15 @@ const MapUpdate = ZkProgram({
 
   methods: {
     add: {
-      privateInputs: [], //[MapUpdateData],
+      privateInputs: [MapUpdateData],
 
-      method(state: MapTransition) {
-        //, update: MapUpdateData) {
-        Provable.log("MapUpdate.add state.hash:", state.hash);
-        //state.count.assertEquals(Field(1));
-        //const computedState = MapTransition.add(update);
-        //MapTransition.assertEquals(computedState, state);
+      method(state: MapTransition, update: MapUpdateData) {
+        //Provable.log("MapUpdate.add state.hash:", state.hash);
+        const computedState = MapTransition.add(update);
+        MapTransition.assertEquals(computedState, state);
       },
     },
-    /*
+
     update: {
       privateInputs: [MapUpdateData, DomainName, Signature],
 
@@ -413,7 +414,7 @@ const MapUpdate = ZkProgram({
         MapTransition.assertEquals(computedState, state);
       },
     },
-    
+
     merge: {
       privateInputs: [SelfProof, SelfProof],
 
@@ -431,7 +432,6 @@ const MapUpdate = ZkProgram({
         MapTransition.assertEquals(computedState, newState);
       },
     },
-    */
   },
 });
 

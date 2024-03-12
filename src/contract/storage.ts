@@ -13,11 +13,11 @@ export class Storage extends Struct({
   constructor(value: { hashString: [Field, Field] }) {
     super(value);
   }
-  toFields(): Field[] {
+  convertToFields(): Field[] {
     return this.hashString;
   }
 
-  static fromFields(fields: Field[]): Storage {
+  static createFromFields(fields: Field[]): Storage {
     return new Storage({ hashString: [fields[0], fields[1]] });
   }
 

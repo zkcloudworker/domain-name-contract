@@ -20,11 +20,11 @@ export class Metadata extends Struct({
     state1.kind.assertEquals(state2.kind);
   }
 
-  toFields(): Field[] {
+  convertToFields(): Field[] {
     return [this.data, this.kind];
   }
 
-  static fromFields(fields: Field[]): Metadata {
+  static createFromFields(fields: Field[]): Metadata {
     return new Metadata({
       data: fields[0],
       kind: fields[1],
@@ -51,11 +51,11 @@ export class MetadataWitness extends Struct({
     state1.kind.assertEquals(state2.kind);
   }
 
-  toFields(): Field[] {
+  convertToFields(): Field[] {
     return [...this.data.toFields(), ...this.kind.toFields()];
   }
 
-  static fromFields(fields: Field[]): MetadataWitness {
+  static createFromFields(fields: Field[]): MetadataWitness {
     return new MetadataWitness({
       data: MerkleMapWitness.fromFields(fields.slice(0, fields.length / 2)),
       kind: MerkleMapWitness.fromFields(fields.slice(fields.length / 2)),
@@ -94,14 +94,14 @@ export class MetadataUpdate extends Struct({
     super(value);
   }
 
-  toFields(): Field[] {
+  convertToFields(): Field[] {
     const verifier = this.verifier.toFields();
     return [
       this.oldRoot.data,
       this.oldRoot.kind,
       this.newRoot.data,
       this.newRoot.kind,
-      ...this.storage.toFields(),
+      ...this.storage.convertToFields(),
       this.name,
       this.owner,
       this.version.toFields()[0],
@@ -110,7 +110,7 @@ export class MetadataUpdate extends Struct({
     ];
   }
 
-  static fromFields(fields: Field[]): MetadataUpdate {
+  static createFromFields(fields: Field[]): MetadataUpdate {
     const verifier = PublicKey.fromFields(fields.slice(fields.length - 2));
     return new MetadataUpdate({
       oldRoot: new Metadata({

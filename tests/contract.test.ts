@@ -53,7 +53,7 @@ import { Metadata } from "../src/contract/metadata";
 import { createBlock } from "../src/rollup/blocks";
 import { calculateTransactionsProof } from "../src/contract/proof";
 
-//setNumberOfWorkers(8);
+setNumberOfWorkers(8);
 const network: blockchain = "local";
 //const Local = Mina.LocalBlockchain();
 //Mina.setActiveInstance(Local);
@@ -61,8 +61,8 @@ const network: blockchain = "local";
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const ELEMENTS_NUMBER = 1;
-const BLOCKS_NUMBER = 1;
+const ELEMENTS_NUMBER = 3;
+const BLOCKS_NUMBER = 5;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -243,7 +243,7 @@ describe("Validators", () => {
       });
       const signature = Signature.create(
         blockProducerPrivateKey,
-        blockData.toFields()
+        blockData.convertToFields()
       );
 
       const tx = await Mina.transaction({ sender }, () => {

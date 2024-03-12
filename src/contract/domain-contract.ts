@@ -33,34 +33,34 @@ export class NewBlockTransactions extends Struct({
   value: Field, // sum of the hashes of all transactions
   count: Field, // number of transactions
 }) {
-  toFields() {
+  convertToFields() {
     return [this.value, this.count];
   }
   hash() {
     return Poseidon.hashPacked(NewBlockTransactions, this);
   }
 }
+const a = new NewBlockTransactions({ value: Field(1), count: Field(2) });
 export class BlockData extends Struct({
   txs: NewBlockTransactions,
   root: Field,
   storage: Storage,
   address: PublicKey,
 }) {
-  toFields() {
+  convertToFields() {
     return [
-      ...this.txs.toFields(),
+      ...this.txs.convertToFields(),
       this.root,
-      ...this.storage.toFields(),
+      ...this.storage.convertToFields(),
       ...this.address.toFields(),
     ];
   }
-
   toState(previousBlock: PublicKey): Field[] {
     return [
       this.root,
       this.txs.hash(),
       ...previousBlock.toFields(),
-      ...this.storage.toFields(),
+      ...this.storage.convertToFields(),
       Bool(false).toField(),
       Bool(false).toField(),
     ];
@@ -216,7 +216,7 @@ export class DomainNameContract extends TokenContract {
     this.checkValidatorsDecision(proof);
     const tokenId = this.deriveTokenId();
     signature
-      .verify(proof.publicInput.decision.address, data.toFields())
+      .verify(proof.publicInput.decision.address, data.convertToFields())
       .assertEquals(true);
     proof.publicInput.decision.decision.assertEquals(
       ValidatorDecisionType.createBlock
@@ -314,7 +314,7 @@ export class DomainNameContract extends TokenContract {
 
   @method proveBlock(proof: MapUpdateProof, blockAddress: PublicKey) {
     const timestamp = this.network.timestamp.getAndRequireEquals();
-    Provable.log("proveBlock time", timestamp);
+    //Provable.log("proveBlock time", timestamp);
     timestamp.assertGreaterThan(proof.publicInput.time);
     proof.verify();
     const tokenId = this.deriveTokenId();

@@ -26,7 +26,7 @@ export class ValidatorWitness extends MerkleWitness(3) {}
 export class ValidatorDecisionExtraData extends Struct({
   data: [Field, Field, Field],
 }) {
-  public toFields(): Field[] {
+  public convertToFields(): Field[] {
     return this.data;
   }
   static fromBlockCreationData(params: {
@@ -112,14 +112,14 @@ export class ValidatorsDecision extends Struct({
   data: ValidatorDecisionExtraData,
   expiry: UInt64, // Unix time when decision expires
 }) {
-  public toFields() {
+  public convertToFields() {
     return [
       ...this.contract.toFields(),
       this.chainId,
       this.root,
       this.decision,
       ...this.address.toFields(),
-      ...this.data.toFields(),
+      ...this.data.convertToFields(),
       ...this.expiry.toFields(),
     ];
   }
@@ -146,7 +146,7 @@ export class ValidatorsDecisionState extends Struct({
   ) {
     const hash = Poseidon.hashPacked(PublicKey, validatorAddress);
     signature
-      .verify(validatorAddress, decision.toFields())
+      .verify(validatorAddress, decision.convertToFields())
       .assertEquals(Bool(true));
     const root = witness.calculateRoot(hash);
     decision.root.assertEquals(root);
