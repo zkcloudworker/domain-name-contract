@@ -39,9 +39,46 @@ class MerkleTree {
       nodes.push({ index: level, value: node });
     }
     return {
-      nodes,
       height: this.height,
+      nodes,
     };
+  }
+
+  toCompressedJSON() {
+    const nodes: { [key: string]: string } = {};
+    for (const level in this.nodes) {
+      const node: string[] = [];
+      for (const index in this.nodes[level]) {
+        node.push(BigInt(index).toString(36));
+        node.push(this.nodes[level][index].toBigInt().toString(36));
+      }
+      nodes[level] = node.join(".");
+    }
+    return {
+      height: this.height,
+      nodes,
+    };
+  }
+
+  static fromCompressedJSON(json: any) {
+    function convert(value: string, radix: number) {
+      return [...value.toString()].reduce(
+        (r, v) => r * BigInt(radix) + BigInt(parseInt(v, radix)),
+        0n
+      );
+    }
+    const tree = new MerkleTree(json.height);
+    for (const level in json.nodes) {
+      const node = json.nodes[level].split(".");
+      for (let i = 0; i < node.length; i += 2) {
+        tree.setNode(
+          parseInt(level),
+          BigInt(convert(node[i], 36)),
+          Field(BigInt(convert(node[i + 1], 36)))
+        );
+      }
+    }
+    return tree;
   }
 
   static fromJSON(json: any) {

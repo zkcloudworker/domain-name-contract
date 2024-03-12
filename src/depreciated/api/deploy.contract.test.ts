@@ -9,9 +9,9 @@ import {
   MerkleMap,
 } from "o1js";
 import { initBlockchain, fee, accountBalanceMina } from "zkcloudworker";
-import { DomainNameContract } from "../../src/contract/domain-contract";
-import { MapUpdate } from "../../src/rollup/transaction";
-import { nameContract, deployer as berkeleyDeployer } from "../../src/config";
+import { DomainNameContract } from "../../contract/domain-contract";
+import { MapUpdate } from "../../rollup/transaction";
+import { nameContract, deployer as berkeleyDeployer } from "../../config";
 
 const useLocalBlockchain = true;
 const ownerPublicKey = nameContract.ownerPrivateKey.toPublicKey();

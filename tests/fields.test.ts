@@ -1,11 +1,13 @@
 import { describe, expect, it } from "@jest/globals";
-import { Field, PrivateKey, PublicKey, Signature, Struct } from "o1js";
+import { Field, PrivateKey, PublicKey, Signature } from "o1js";
 import { serializeFields, deserializeFields } from "../src/lib/fields";
 import {
   DomainName,
   DomainTransactionEnum,
   DomainTransaction,
+  DomainTransactionData,
 } from "../src/rollup/transaction";
+import exp from "constants";
 
 const ELEMENTS_NUMBER = 10;
 
@@ -49,9 +51,21 @@ describe("Map", () => {
       DomainTransaction.fromFields(fields)
     );
     const tx2 = DomainTransaction.toFields(restored);
+    const signature = Signature.create(PrivateKey.random(), [Field(1)]);
+    const data: DomainTransactionData = new DomainTransactionData(
+      tx,
+      domainName
+      //signature
+    );
+    const json = data.toJSON();
+    const str = JSON.stringify(json, null, 2);
+    console.log("str", str);
+    const data2 = DomainTransactionData.fromJSON(JSON.parse(str));
+    const tx3 = DomainTransaction.toFields(data2.tx);
     expect(tx1.length).toBe(tx2.length);
     for (let i = 0; i < tx1.length; i++) {
       expect(tx1[i].toJSON()).toEqual(tx2[i].toJSON());
+      expect(tx1[i].toJSON()).toEqual(tx3[i].toJSON());
     }
   });
   it(`should convert Signature`, async () => {

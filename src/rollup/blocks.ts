@@ -1,9 +1,15 @@
-import { MerkleMap, Field } from "o1js";
+import { Field } from "o1js";
 
 import { NewBlockTransactions } from "../contract/domain-contract";
 import { DomainTransactionData } from "./transaction";
+import { MerkleMap } from "../lib/merkle-map";
+import { DomainDatabase } from "./database";
 
-export function createBlock(elements: DomainTransactionData[], map: MerkleMap) {
+export function createBlock(
+  elements: DomainTransactionData[],
+  map: MerkleMap,
+  database: DomainDatabase
+) {
   const count = elements.length;
   const oldRoot = map.getRoot();
   let hashSum = Field(0);
@@ -14,6 +20,7 @@ export function createBlock(elements: DomainTransactionData[], map: MerkleMap) {
     const hash = elements[i].tx.hash();
     hashSum = hashSum.add(hash);
     map.set(key, value);
+    database.insert(domain);
   }
   const root = map.getRoot();
   return {
@@ -23,5 +30,6 @@ export function createBlock(elements: DomainTransactionData[], map: MerkleMap) {
       value: hashSum,
       count: Field(count),
     }),
+    database,
   };
 }

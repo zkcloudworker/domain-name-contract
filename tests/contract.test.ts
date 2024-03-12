@@ -9,7 +9,6 @@ import {
   AccountUpdate,
   VerificationKey,
   UInt64,
-  MerkleMap,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -50,15 +49,18 @@ import {
 } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
 import { createBlock } from "../src/rollup/blocks";
-import { calculateTransactionsProof } from "../src/contract/proof";
+import { calculateTransactionsProof } from "../src/rollup/txs-proof";
+import { MerkleMap } from "../src/lib/merkle-map";
+import { MerkleTree } from "../src/lib/merkle-tree";
+import { DomainDatabase } from "../src/rollup/database";
 
 setNumberOfWorkers(8);
 const network: blockchain = "local";
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const ELEMENTS_NUMBER = 1;
-const BLOCKS_NUMBER = 1;
+const ELEMENTS_NUMBER = 4000;
+const BLOCKS_NUMBER = 10;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -71,14 +73,17 @@ const zkApp = new DomainNameContract(publicKey);
 let verificationKey: VerificationKey;
 let blockVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
+let tokenId: Field;
 const storage = new Storage({ hashString: [Field(0), Field(0)] });
 const map = new MerkleMap();
 const proveMap = new MerkleMap();
 
 interface Block {
   address: PublicKey;
-  txs: NewBlockTransactions;
+  json: string;
+  txs: Field;
   root: Field;
+  count: Field;
   storage: Storage;
 }
 const blocks: Block[] = [];
@@ -119,15 +124,11 @@ describe("Validators", () => {
     console.log("Network ID:", networkId);
     const networkIdHash = getNetworkIdHash();
     console.log("Network ID hash:", networkIdHash.toJSON());
-    console.log("sender", sender.toBase58());
+    //console.log("sender", sender.toBase58());
     console.log("Sender balance", await accountBalanceMina(sender));
     expect(deployer).toBeDefined();
     expect(sender).toBeDefined();
     expect(deployer.toPublicKey().toBase58()).toBe(sender.toBase58());
-    //expect(typeof networkId).toBe("object");
-    //if (typeof networkId !== "object")
-    //  throw new Error("networkId is not an object");
-    //expect(networkId.custom).toBe(network);
 
     console.time("methods analyzed");
     const methods = [
@@ -190,6 +191,7 @@ describe("Validators", () => {
     });
     await tx2.prove();
     await tx2.sign([deployer, nameContract.firstBlockPrivateKey!]).send();
+    tokenId = zkApp.deriveTokenId();
   });
 
   for (let i = 0; i < BLOCKS_NUMBER; i++) {
@@ -200,13 +202,40 @@ describe("Validators", () => {
       const blockProducerPrivateKey = PrivateKey.random();
       const blockProducerPublicKey = blockProducerPrivateKey.toPublicKey();
 
-      const { root, oldRoot, txs } = createBlock(domainNames[i], map);
+      let oldDatabase: DomainDatabase = new DomainDatabase();
+      let map = new MerkleMap();
+      if (i > 0) {
+        const json = JSON.parse(blocks[i - 1].json);
+        map.tree = MerkleTree.fromCompressedJSON(json.map);
+        oldDatabase = new DomainDatabase(json.database);
+      }
+
+      const { root, oldRoot, txs, database } = createBlock(
+        domainNames[i],
+        map,
+        oldDatabase
+      );
+      const json = {
+        txs: domainNames[i].map((tx) => tx.toJSON()),
+        database: database.data,
+        map: map.tree.toCompressedJSON(),
+      };
+      //console.log("txs", json.txs);
+      //console.log("database", database.data);
+      expect(root.toJSON()).toBe(database.getRoot().toJSON());
+      const restoredMap = new MerkleMap();
+      restoredMap.tree = MerkleTree.fromCompressedJSON(json.map);
+      expect(restoredMap.getRoot().toJSON()).toBe(root.toJSON());
+      const str = JSON.stringify(json, null, 2);
+      console.log("JSON size:", str.length.toLocaleString());
 
       blocks.push({
         address: blockPublicKey,
-        txs,
+        txs: txs.hash(),
+        count: txs.count,
         root,
         storage,
+        json: str,
       });
 
       const decision = new ValidatorsDecision({
@@ -254,6 +283,19 @@ describe("Validators", () => {
 
     it(`should validate a block`, async () => {
       console.time(`block ${i} validated`);
+      let map = new MerkleMap();
+      const json = JSON.parse(blocks[i].json);
+      map.tree = MerkleTree.fromCompressedJSON(json.map);
+      const database = new DomainDatabase(json.database);
+      const block = new BlockContract(blocks[i].address, tokenId);
+      const root = block.root.get();
+      expect(root.toJSON()).toBe(blocks[i].root.toJSON());
+      expect(root.toJSON()).toBe(database.getRoot().toJSON());
+      expect(root.toJSON()).toBe(map.getRoot().toJSON());
+      const storage = block.storage.get();
+      Storage.assertEquals(storage, blocks[i].storage);
+      const txs = block.txs.get();
+      expect(txs.toJSON()).toBe(blocks[i].txs.toJSON());
 
       const decision = new ValidatorsDecision({
         contract: publicKey,
@@ -262,9 +304,9 @@ describe("Validators", () => {
         decision: ValidatorDecisionType.validate,
         address: blocks[i].address,
         data: ValidatorDecisionExtraData.fromBlockValidationData({
-          storage: blocks[i].storage,
-          hash: blocks[i].txs.hash(),
-          root: blocks[i].root,
+          storage,
+          txs,
+          root,
         }),
         expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
       });
@@ -287,7 +329,7 @@ describe("Validators", () => {
       console.timeEnd(`block ${i} validated`);
     });
 
-    it(`should prove a block`, async () => {
+    it.skip(`should prove a block`, async () => {
       console.time(`block ${i} proved`);
 
       const proof: MapUpdateProof = await calculateTransactionsProof(

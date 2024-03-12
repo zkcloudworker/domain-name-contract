@@ -57,12 +57,12 @@ export class ValidatorDecisionExtraData extends Struct({
 
   static fromBlockValidationData(params: {
     storage: Storage;
-    hash: Field;
+    txs: Field;
     root: Field;
   }) {
-    const { storage, hash, root } = params;
+    const { storage, txs, root } = params;
     return new ValidatorDecisionExtraData({
-      data: [root, hash, Poseidon.hashPacked(Storage, storage)],
+      data: [root, txs, Poseidon.hashPacked(Storage, storage)],
     });
   }
 

@@ -8,11 +8,8 @@ import {
 } from "zkcloudworker";
 import { Field, PublicKey, MerkleMap, Signature } from "o1js";
 import { DomainNameContract } from "../../src/base/mapcontract";
-import { JWT, baseContract } from "../../src/config";
-import {
-  checkMinaZkappTransaction,
-  fetchMinaAccount,
-} from "../../src/lib/fetch";
+import { JWT, baseContract } from "../../config";
+import { checkMinaZkappTransaction, fetchMinaAccount } from "../../lib/fetch";
 
 describe("Merkle map demo reset", () => {
   const publicKey = PublicKey.fromBase58(baseContract.contractAddress);

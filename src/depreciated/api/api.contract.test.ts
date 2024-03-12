@@ -56,15 +56,15 @@ import {
   DomainName,
   BATCH_SIZE,
   ReducerState,
-} from "../../src/contract/domain-contract";
-import { Storage } from "../../src/contract/storage";
-import { prepareProofData } from "../../src/contract/proof";
-import { nameContract, JWT } from "../../src/config";
+} from "../../contract/domain-contract";
+import { Storage } from "../../contract/storage";
+import { prepareProofData } from "../../rollup/txs-proof";
+import { nameContract, JWT } from "../../config";
 import {
   fetchMinaAccount,
   fetchMinaActions,
   checkMinaZkappTransaction,
-} from "../../src/lib/fetch";
+} from "../../lib/fetch";
 
 const ELEMENTS_COUNT = 128;
 const addActions = false;
