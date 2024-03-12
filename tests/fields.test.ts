@@ -38,30 +38,20 @@ describe("Map", () => {
   });
   it(`should convert DomainTransaction`, async () => {
     const domainName = DomainName.empty();
-    expect(domainName.convertToFields().length).toBe(8);
     const tx = new DomainTransaction({
       type: DomainTransactionEnum.add,
       domain: domainName,
     });
-    const s = serializeFields(tx.convertToFields());
-    const b = serializeFields(DomainTransaction.toFields(tx));
+    const tx1 = DomainTransaction.toFields(tx);
+    const s = serializeFields(tx1);
     const fields = deserializeFields(s);
-    const restored = DomainTransaction.createFromFields(fields);
-    const restored2 = new DomainTransaction(
+    const restored = new DomainTransaction(
       DomainTransaction.fromFields(fields)
     );
-    const restored3 = new DomainTransaction(
-      DomainTransaction.fromFields(deserializeFields(b))
-    );
-    const tx1 = tx.convertToFields();
-    const tx2 = restored.convertToFields();
-    const tx3 = restored2.convertToFields();
-    const tx4 = restored3.convertToFields();
+    const tx2 = DomainTransaction.toFields(restored);
     expect(tx1.length).toBe(tx2.length);
     for (let i = 0; i < tx1.length; i++) {
       expect(tx1[i].toJSON()).toEqual(tx2[i].toJSON());
-      expect(tx1[i].toJSON()).toEqual(tx3[i].toJSON());
-      expect(tx1[i].toJSON()).toEqual(tx4[i].toJSON());
     }
   });
   it(`should convert Signature`, async () => {

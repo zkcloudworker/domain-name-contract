@@ -1,11 +1,4 @@
-import {
-  Field,
-  MerkleMap,
-  verify,
-  VerificationKey,
-  MerkleTree,
-  UInt64,
-} from "o1js";
+import { Field, MerkleMap, verify, VerificationKey, UInt64 } from "o1js";
 import {
   MapUpdateData,
   MapTransition,

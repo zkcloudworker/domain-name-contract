@@ -18,7 +18,6 @@ import {
   VerificationKey,
   Poseidon,
   MerkleMap,
-  Provable,
 } from "o1js";
 import { getNetworkIdHash } from "zkcloudworker";
 import { Storage } from "./storage";
@@ -33,9 +32,6 @@ export class NewBlockTransactions extends Struct({
   value: Field, // sum of the hashes of all transactions
   count: Field, // number of transactions
 }) {
-  convertToFields() {
-    return [this.value, this.count];
-  }
   hash() {
     return Poseidon.hashPacked(NewBlockTransactions, this);
   }
@@ -47,20 +43,12 @@ export class BlockData extends Struct({
   storage: Storage,
   address: PublicKey,
 }) {
-  convertToFields() {
-    return [
-      ...this.txs.convertToFields(),
-      this.root,
-      ...this.storage.convertToFields(),
-      ...this.address.toFields(),
-    ];
-  }
   toState(previousBlock: PublicKey): Field[] {
     return [
       this.root,
       this.txs.hash(),
       ...previousBlock.toFields(),
-      ...this.storage.convertToFields(),
+      ...Storage.toFields(this.storage),
       Bool(false).toField(),
       Bool(false).toField(),
     ];
@@ -216,7 +204,7 @@ export class DomainNameContract extends TokenContract {
     this.checkValidatorsDecision(proof);
     const tokenId = this.deriveTokenId();
     signature
-      .verify(proof.publicInput.decision.address, data.convertToFields())
+      .verify(proof.publicInput.decision.address, BlockData.toFields(data))
       .assertEquals(true);
     proof.publicInput.decision.decision.assertEquals(
       ValidatorDecisionType.createBlock

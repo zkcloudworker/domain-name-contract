@@ -20,20 +20,16 @@ import {
   DomainNameAction,
   ReducerState,
   BATCH_SIZE,
-} from "../src/contract/domain-contract";
-import { stringToFields } from "../src/lib/hash";
-import {
-  MapUpdateProof,
-  MapUpdate,
-  DomainName,
-} from "../src/rollup/transaction";
-import { TREE_HEIGHT, addBlock, BlockElement } from "../src/rollup/blocks";
-import { BlockCalculation } from "../src/rollup/proof";
-import { calculateProof } from "../src/contract/proof";
-import { Storage } from "../src/contract/storage";
-import { Metadata } from "../src/contract/metadata";
-import { emptyActionsHash, calculateActionsHash } from "../src/lib/hash";
-import { Memory } from "../src/lib/memory";
+} from "../contract/domain-contract";
+import { stringToFields } from "../lib/hash";
+import { MapUpdateProof, MapUpdate, DomainName } from "../rollup/transaction";
+import { TREE_HEIGHT, addBlock, BlockElement } from "../rollup/blocks";
+import { BlockCalculation } from "./proof";
+import { calculateProof } from "../contract/proof";
+import { Storage } from "../contract/storage";
+import { Metadata } from "../contract/metadata";
+import { emptyActionsHash, calculateActionsHash } from "../lib/hash";
+import { Memory } from "../lib/memory";
 
 const ACTIONS_COUNT = 1;
 const ELEMENTS_NUMBER = 1000;

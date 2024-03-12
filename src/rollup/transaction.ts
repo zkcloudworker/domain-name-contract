@@ -11,7 +11,6 @@ import {
   Bool,
   UInt8,
   Signature,
-  Provable,
 } from "o1js";
 import { Metadata } from "../contract/metadata";
 import { Storage } from "../contract/storage";
@@ -24,22 +23,6 @@ export class DomainNameValue extends Struct({
 }) {
   hash(): Field {
     return Poseidon.hashPacked(DomainNameValue, this);
-  }
-  convertToFields(): Field[] {
-    return [
-      ...this.address.toFields(),
-      ...this.metadata.convertToFields(),
-      ...this.storage.convertToFields(),
-      ...this.expiry.toFields(),
-    ];
-  }
-  static createFromFields(fields: Field[]): DomainNameValue {
-    return new DomainNameValue({
-      address: PublicKey.fromFields(fields.slice(0, 2)),
-      metadata: Metadata.createFromFields(fields.slice(2, 4)),
-      storage: Storage.createFromFields(fields.slice(4, 6)),
-      expiry: UInt64.fromFields(fields.slice(6)),
-    });
   }
   static empty(): DomainNameValue {
     return new DomainNameValue({
@@ -55,17 +38,6 @@ export class DomainName extends Struct({
   name: Field,
   data: DomainNameValue,
 }) {
-  convertToFields(): Field[] {
-    return [this.name, ...this.data.convertToFields()];
-  }
-
-  static createFromFields(fields: Field[]): DomainName {
-    return new DomainName({
-      name: fields[0],
-      data: DomainNameValue.createFromFields(fields.slice(1)),
-    });
-  }
-
   static empty(): DomainName {
     return new DomainName({
       name: Field(0),
@@ -103,21 +75,6 @@ export class DomainTransaction extends Struct({
   type: UInt8,
   domain: DomainName,
 }) {
-  convertToFields(): Field[] {
-    return [
-      this.type.toUInt32().toFields()[0],
-      ...this.domain.convertToFields(),
-    ];
-  }
-
-  static createFromFields(fields: Field[]): DomainTransaction {
-    fields[0].assertLessThanOrEqual(Field(4));
-    return new DomainTransaction({
-      type: UInt8.from(fields[0]),
-      domain: DomainName.createFromFields(fields.slice(1, 9)),
-    });
-  }
-
   hash(): Field {
     return Poseidon.hashPacked(DomainTransaction, this);
   }
@@ -147,27 +104,7 @@ class MapUpdateData extends Struct({
   time: UInt64, // unix time when the map was updated
   tx: DomainTransaction,
   witness: MerkleMapWitness,
-}) {
-  convertToFields(): Field[] {
-    return [
-      this.oldRoot,
-      this.newRoot,
-      this.time.toFields()[0],
-      ...this.tx.convertToFields(),
-      ...this.witness.toFields(),
-    ];
-  }
-
-  static createFromFields(fields: Field[]): MapUpdateData {
-    return new MapUpdateData({
-      oldRoot: fields[0],
-      newRoot: fields[1],
-      time: UInt64.from(fields[2]),
-      tx: DomainTransaction.createFromFields(fields.slice(3, 12)),
-      witness: MerkleMapWitness.fromFields(fields.slice(12)),
-    });
-  }
-}
+}) {}
 
 class MapTransition extends Struct({
   oldRoot: Field,
@@ -221,7 +158,10 @@ class MapTransition extends Struct({
     update.newRoot.assertEquals(rootAfter);
     key.assertEquals(keyAfter);
 
-    signature.verify(oldDomain.data.address, update.tx.convertToFields());
+    signature.verify(
+      oldDomain.data.address,
+      DomainTransaction.toFields(update.tx)
+    );
 
     const hash = update.tx.hash();
 
@@ -323,26 +263,6 @@ class MapTransition extends Struct({
     transition1.hash.assertEquals(transition2.hash);
     transition1.count.assertEquals(transition2.count);
     transition1.time.assertEquals(transition2.time);
-  }
-
-  convertToFields(): Field[] {
-    return [
-      this.oldRoot,
-      this.newRoot,
-      this.hash,
-      this.count,
-      this.time.toFields()[0],
-    ];
-  }
-
-  static createFromFields(fields: Field[]): MapTransition {
-    return new MapTransition({
-      oldRoot: fields[0],
-      newRoot: fields[1],
-      hash: fields[2],
-      count: fields[3],
-      time: UInt64.from(fields[4]),
-    });
   }
 }
 
