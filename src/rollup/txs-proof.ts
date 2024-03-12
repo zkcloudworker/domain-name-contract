@@ -1,4 +1,4 @@
-import { Field, MerkleMap, verify, VerificationKey, UInt64 } from "o1js";
+import { Field, verify, VerificationKey, UInt64 } from "o1js";
 import {
   MapUpdateData,
   MapTransition,
@@ -7,7 +7,8 @@ import {
   DomainName,
   DomainTransactionData,
   DomainTransactionType,
-} from "../rollup/transaction";
+} from "./transaction";
+import { MerkleMap } from "../lib/merkle-map";
 import { Memory } from "../lib/memory";
 
 export async function calculateTransactionsProof(

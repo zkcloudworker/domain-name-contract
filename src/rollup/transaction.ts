@@ -14,6 +14,7 @@ import {
 } from "o1js";
 import { Metadata } from "../contract/metadata";
 import { Storage } from "../contract/storage";
+import { serializeFields, deserializeFields } from "../lib/fields";
 
 export class DomainNameValue extends Struct({
   address: PublicKey,
@@ -95,6 +96,48 @@ export class DomainTransactionData {
     return ["add", "extend", "update", "remove"][
       this.tx.type.toNumber() - 1
     ] as DomainTransactionType;
+  }
+
+  public toJSON() {
+    this.validate();
+    return {
+      tx: serializeFields(DomainTransaction.toFields(this.tx)),
+      oldDomain: this.oldDomain
+        ? serializeFields(DomainName.toFields(this.oldDomain))
+        : undefined,
+      signature: this.signature
+        ? serializeFields(Signature.toFields(this.signature))
+        : undefined,
+    };
+  }
+
+  static fromJSON(data: any): DomainTransactionData {
+    const tx = new DomainTransaction(
+      DomainTransaction.fromFields(deserializeFields(data.tx))
+    );
+    const oldDomain = data.oldDomain
+      ? new DomainName(DomainName.fromFields(deserializeFields(data.oldDomain)))
+      : undefined;
+    const signature = data.signature
+      ? Signature.fromFields(deserializeFields(data.signature))
+      : undefined;
+    const domain = new DomainTransactionData(tx, oldDomain, signature);
+    domain.validate();
+    return domain;
+  }
+
+  public validate() {
+    const txType = this.txType();
+    if (!this.oldDomain) {
+      if (txType === "update" || txType === "extend")
+        throw new Error(
+          "oldDomain is required for update and extend transaction"
+        );
+    }
+    if (!this.signature) {
+      if (txType === "update")
+        throw new Error("signature is required for update transaction");
+    }
   }
 }
 
