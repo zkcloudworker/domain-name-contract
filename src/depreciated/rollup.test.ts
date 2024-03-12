@@ -12,14 +12,14 @@ import {
   verify,
   setNumberOfWorkers,
 } from "o1js";
-import { TREE_HEIGHT, addBlock, BlockElement } from "../src/rollup/blocks";
-import { BlockCalculation, BlockCalculationProof } from "../src/rollup/proof";
-import { MapUpdate, DomainName } from "../src/rollup/transaction";
-import { Storage } from "../src/contract/storage";
-import { Metadata } from "../src/contract/metadata";
-import { calculateProof } from "../src/contract/proof";
-import { stringToFields } from "../src/lib/hash";
-import { DomainNameAction } from "../src/contract/domain-contract";
+import { TREE_HEIGHT, addBlock, BlockElement } from "../rollup/blocks";
+import { BlockCalculation, BlockCalculationProof } from "./proof";
+import { MapUpdate, DomainName } from "../rollup/transaction";
+import { Storage } from "../contract/storage";
+import { Metadata } from "../contract/metadata";
+import { calculateProof } from "../contract/proof";
+import { stringToFields } from "../lib/hash";
+import { DomainNameAction } from "../contract/domain-contract";
 const TREE_MAX_ELEMENTS = (365 * 24 * 60) / 3; // 1 year of 3 minutes blocks
 const ELEMENTS_NUMBER = 10;
 const BLOCKS_NUMBER = 3;

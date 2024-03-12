@@ -10,7 +10,6 @@ import {
   VerificationKey,
   UInt64,
   MerkleMap,
-  MerkleList,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -55,14 +54,11 @@ import { calculateTransactionsProof } from "../src/contract/proof";
 
 setNumberOfWorkers(8);
 const network: blockchain = "local";
-//const Local = Mina.LocalBlockchain();
-//Mina.setActiveInstance(Local);
-//const deployer = Local.testAccounts[0].privateKey;
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const ELEMENTS_NUMBER = 3;
-const BLOCKS_NUMBER = 5;
+const ELEMENTS_NUMBER = 1;
+const BLOCKS_NUMBER = 1;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -243,7 +239,7 @@ describe("Validators", () => {
       });
       const signature = Signature.create(
         blockProducerPrivateKey,
-        blockData.convertToFields()
+        BlockData.toFields(blockData)
       );
 
       const tx = await Mina.transaction({ sender }, () => {

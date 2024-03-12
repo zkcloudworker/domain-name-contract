@@ -2,46 +2,40 @@ import { describe, expect, it } from "@jest/globals";
 import {
   Field,
   PrivateKey,
-  Encoding,
-  Poseidon,
-  PublicKey,
   Signature,
   verify,
   setNumberOfWorkers,
   Mina,
   AccountUpdate,
-  Account,
   VerificationKey,
   UInt64,
   MerkleMap,
 } from "o1js";
-import { validatorsPrivateKeys } from "../src/config";
+import { validatorsPrivateKeys } from "../config";
 import {
   ValidatorsDecision,
   ValidatorDecisionExtraData,
-  ValidatorsDecisionState,
   ValidatorsVoting,
   ValidatorsVotingProof,
-  ValidatorWitness,
   ValidatorDecisionType,
-} from "../src/rollup/validators";
-import { MerkleTree } from "../src/lib/merkle-tree";
+} from "../rollup/validators";
 import {
   DomainNameContract,
   BlockContract,
   BlockData,
-  NewBlockData,
-} from "../src/contract/domain-contract";
-import { stringToFields } from "../src/lib/hash";
+  NewBlockTransactions,
+} from "../contract/domain-contract";
 import {
   getValidatorsTreeAndHash,
-  calculateProof,
-} from "../src/rollup/validators-proof";
-import { Storage } from "../src/contract/storage";
-import { nameContract } from "../src/config";
+  calculateValidatorsProof,
+} from "../rollup/validators-proof";
+import { Storage } from "../contract/storage";
+import { nameContract } from "../config";
+import { initBlockchain, blockchain } from "zkcloudworker";
 
 setNumberOfWorkers(8);
-
+const network: blockchain = "local";
+initBlockchain(network, 1);
 const { tree, totalHash } = getValidatorsTreeAndHash();
 const validators = validatorsPrivateKeys.map((key) => key.toPublicKey());
 const root = tree.getRoot();
@@ -133,7 +127,7 @@ describe("Validators", () => {
       }),
       expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
     });
-    const proof: ValidatorsVotingProof = await calculateProof(
+    const proof: ValidatorsVotingProof = await calculateValidatorsProof(
       decision,
       verificationKey
     );
@@ -148,15 +142,14 @@ describe("Validators", () => {
       address: blockPublicKey,
       root: Field(0),
       storage: storage,
-      newData: new NewBlockData({
-        keys: Field(0),
-        values: Field(0),
+      txs: new NewBlockTransactions({
+        value: Field(0),
         count: Field(0),
       }),
     });
     const signature = Signature.create(
       blockProducerPrivateKey,
-      blockData.toFields()
+      BlockData.toFields(blockData)
     );
 
     const tx = await Mina.transaction({ sender }, () => {
@@ -182,7 +175,7 @@ describe("Validators", () => {
       }),
       expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
     });
-    const proof: ValidatorsVotingProof = await calculateProof(
+    const proof: ValidatorsVotingProof = await calculateValidatorsProof(
       decision,
       verificationKey
     );
