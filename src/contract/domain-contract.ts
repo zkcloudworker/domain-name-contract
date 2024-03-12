@@ -18,8 +18,7 @@ import {
   VerificationKey,
   Poseidon,
   MerkleMap,
-  Mina,
-  CircuitString,
+  Provable,
 } from "o1js";
 import { getNetworkIdHash } from "zkcloudworker";
 import { Storage } from "./storage";
@@ -315,6 +314,7 @@ export class DomainNameContract extends TokenContract {
 
   @method proveBlock(proof: MapUpdateProof, blockAddress: PublicKey) {
     const timestamp = this.network.timestamp.getAndRequireEquals();
+    Provable.log("proveBlock time", timestamp);
     timestamp.assertGreaterThan(proof.publicInput.time);
     proof.verify();
     const tokenId = this.deriveTokenId();

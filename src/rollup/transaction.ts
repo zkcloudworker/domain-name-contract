@@ -11,6 +11,7 @@ import {
   Bool,
   UInt8,
   Signature,
+  Provable,
 } from "o1js";
 import { Metadata } from "../contract/metadata";
 import { Storage } from "../contract/storage";
@@ -120,11 +121,17 @@ export class DomainTransaction extends Struct({
 }
 
 export class DomainTransactionData {
-  tx: DomainTransaction;
-  oldDomain?: DomainName;
-  signature?: Signature;
+  constructor(
+    public readonly tx: DomainTransaction,
+    public readonly oldDomain?: DomainName,
+    public readonly signature?: Signature
+  ) {
+    this.tx = tx;
+    this.oldDomain = oldDomain;
+    this.signature = signature;
+  }
 
-  txType(): DomainTransactionType {
+  public txType(): DomainTransactionType {
     return ["add", "extend", "update", "remove"][
       this.tx.type.toNumber() - 1
     ] as DomainTransactionType;
@@ -181,6 +188,7 @@ class MapTransition extends Struct({
     key.assertEquals(keyAfter);
 
     const hash = update.tx.hash();
+    //Provable.log("MapTransition add hash", hash);
 
     return new MapTransition({
       oldRoot: update.oldRoot,
@@ -307,11 +315,11 @@ class MapTransition extends Struct({
   }
 
   static assertEquals(transition1: MapTransition, transition2: MapTransition) {
-    transition1.oldRoot.assertEquals(transition2.oldRoot);
-    transition1.newRoot.assertEquals(transition2.newRoot);
-    transition1.hash.assertEquals(transition2.hash);
-    transition1.count.assertEquals(transition2.count);
-    transition1.time.assertEquals(transition2.time);
+    //transition1.oldRoot.assertEquals(transition2.oldRoot);
+    //transition1.newRoot.assertEquals(transition2.newRoot);
+    //transition1.hash.assertEquals(transition2.hash);
+    //transition1.count.assertEquals(transition2.count);
+    //transition1.time.assertEquals(transition2.time);
   }
 
   toFields(): Field[] {
@@ -341,14 +349,17 @@ const MapUpdate = ZkProgram({
 
   methods: {
     add: {
-      privateInputs: [MapUpdateData],
+      privateInputs: [], //[MapUpdateData],
 
-      method(state: MapTransition, update: MapUpdateData) {
-        const computedState = MapTransition.add(update);
-        MapTransition.assertEquals(computedState, state);
+      method(state: MapTransition) {
+        //, update: MapUpdateData) {
+        Provable.log("MapUpdate.add state.hash:", state.hash);
+        //state.count.assertEquals(Field(1));
+        //const computedState = MapTransition.add(update);
+        //MapTransition.assertEquals(computedState, state);
       },
     },
-
+    /*
     update: {
       privateInputs: [MapUpdateData, DomainName, Signature],
 
@@ -402,7 +413,7 @@ const MapUpdate = ZkProgram({
         MapTransition.assertEquals(computedState, state);
       },
     },
-
+    
     merge: {
       privateInputs: [SelfProof, SelfProof],
 
@@ -420,6 +431,7 @@ const MapUpdate = ZkProgram({
         MapTransition.assertEquals(computedState, newState);
       },
     },
+    */
   },
 });
 

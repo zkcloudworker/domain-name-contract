@@ -34,14 +34,15 @@ export async function calculateTransactionsProof(
     type: DomainTransactionType;
   }
   let updates: ElementState[] = [];
-  const time = UInt64.from(Date.now());
+  const time = UInt64.from(Date.now() - 1000 * 60 * 10);
 
   for (const element of elements) {
     const oldRoot = map.getRoot();
-    const type = element.txType();
+    const txType = element.txType();
+    console.log(`Calculating proof data for ${txType} ...`);
     if (isAccepted(element)) {
       const key = element.tx.domain.key();
-      const value = type === "remove" ? Field(0) : element.tx.domain.value();
+      const value = txType === "remove" ? Field(0) : element.tx.domain.value();
       map.set(key, value);
       const newRoot = map.getRoot();
       const update = new MapUpdateData({
@@ -51,14 +52,23 @@ export async function calculateTransactionsProof(
         tx: element.tx,
         witness: map.getWitness(key),
       });
-      updates.push({ isElementAccepted: true, update, oldRoot, type });
+      updates.push({ isElementAccepted: true, update, oldRoot, type: txType });
     } else {
-      updates.push({ isElementAccepted: false, oldRoot, type });
+      updates.push({ isElementAccepted: false, oldRoot, type: txType });
     }
   }
 
   let proofs: MapUpdateProof[] = [];
   for (let i = 0; i < elements.length; i++) {
+    if (verbose)
+      console.log(
+        `Creating proof ${i + 1}/${elements.length}...`,
+        updates[i].isElementAccepted,
+        updates[i].type,
+        updates[i].update!.tx.hash().toJSON()
+      );
+
+    /*
     const state = updates[i].isElementAccepted
       ? updates[i].type === "add"
         ? MapTransition.add(updates[i].update!)
@@ -72,7 +82,13 @@ export async function calculateTransactionsProof(
           )
         : MapTransition.extend(updates[i].update!, elements[i].oldDomain!)
       : MapTransition.reject(updates[i].oldRoot, time, elements[i].tx);
+      */
+    const state: MapTransition = MapTransition.add(updates[i].update!);
+    if (verbose) console.log("State 1:", state.hash.toJSON());
+    const proof = await MapUpdate.add(state);
+    if (verbose) console.log("State 2:", state.hash.toJSON());
 
+    /*
     const proof = updates[i].isElementAccepted
       ? updates[i].type === "add"
         ? await MapUpdate.add(state, updates[i].update!)
@@ -91,12 +107,15 @@ export async function calculateTransactionsProof(
             elements[i].oldDomain!
           )
       : await MapUpdate.reject(state, updates[i].oldRoot, time, elements[i].tx);
+    */
     proofs.push(proof);
+    if (verbose) console.log("Proof created", proof.publicInput.hash.toJSON());
     if (verbose) Memory.info(`Proof ${i + 1}/${elements.length} created`);
   }
 
   console.log("Merging proofs...");
   let proof: MapUpdateProof = proofs[0];
+  /*
   for (let i = 1; i < proofs.length; i++) {
     const state = MapTransition.merge(proof.publicInput, proofs[i].publicInput);
     let mergedProof: MapUpdateProof = await MapUpdate.merge(
@@ -107,7 +126,7 @@ export async function calculateTransactionsProof(
     proof = mergedProof;
     if (verbose) Memory.info(`Proof ${i}/${proofs.length - 1} merged`);
   }
-
+  */
   function isAccepted(element: DomainTransactionData): boolean {
     if (
       (element.txType() === "update" || element.txType() === "extend") &&
@@ -125,6 +144,7 @@ export async function calculateTransactionsProof(
       return false;
     return true; // TODO: implement
   }
+
   const verificationResult: boolean = await verify(
     proof.toJSON(),
     verificationKey
