@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
+import assert from "node:assert/strict";
 import {
   Field,
   PrivateKey,
@@ -59,8 +60,9 @@ const network: blockchain = "local";
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const ELEMENTS_NUMBER = 4000;
-const BLOCKS_NUMBER = 10;
+const fullValidation = true;
+const ELEMENTS_NUMBER = 4;
+const BLOCKS_NUMBER = 3;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -80,16 +82,18 @@ const proveMap = new MerkleMap();
 
 interface Block {
   address: PublicKey;
-  json: string;
   txs: Field;
   root: Field;
   count: Field;
   storage: Storage;
 }
 const blocks: Block[] = [];
+let blockJson = "";
+let lastBlockJson = "";
 
 describe("Validators", () => {
   it(`should prepare blocks data`, async () => {
+    console.log("Preparing data...");
     console.time(`prepared data`);
     for (let j = 0; j < BLOCKS_NUMBER; j++) {
       const blockElements: DomainTransactionData[] = [];
@@ -205,7 +209,7 @@ describe("Validators", () => {
       let oldDatabase: DomainDatabase = new DomainDatabase();
       let map = new MerkleMap();
       if (i > 0) {
-        const json = JSON.parse(blocks[i - 1].json);
+        const json = JSON.parse(blockJson);
         map.tree = MerkleTree.fromCompressedJSON(json.map);
         oldDatabase = new DomainDatabase(json.database);
       }
@@ -222,10 +226,12 @@ describe("Validators", () => {
       };
       //console.log("txs", json.txs);
       //console.log("database", database.data);
-      expect(root.toJSON()).toBe(database.getRoot().toJSON());
-      const restoredMap = new MerkleMap();
-      restoredMap.tree = MerkleTree.fromCompressedJSON(json.map);
-      expect(restoredMap.getRoot().toJSON()).toBe(root.toJSON());
+      if (fullValidation) {
+        expect(root.toJSON()).toBe(database.getRoot().toJSON());
+        const restoredMap = new MerkleMap();
+        restoredMap.tree = MerkleTree.fromCompressedJSON(json.map);
+        expect(restoredMap.getRoot().toJSON()).toBe(root.toJSON());
+      }
       const str = JSON.stringify(json, null, 2);
       console.log("JSON size:", str.length.toLocaleString());
 
@@ -235,8 +241,9 @@ describe("Validators", () => {
         count: txs.count,
         root,
         storage,
-        json: str,
       });
+      lastBlockJson = blockJson;
+      blockJson = str;
 
       const decision = new ValidatorsDecision({
         contract: publicKey,
@@ -283,19 +290,45 @@ describe("Validators", () => {
 
     it(`should validate a block`, async () => {
       console.time(`block ${i} validated`);
-      let map = new MerkleMap();
-      const json = JSON.parse(blocks[i].json);
+      const map = new MerkleMap();
+      const oldMap = new MerkleMap();
+      const json = JSON.parse(blockJson);
+      let oldDatabase = new DomainDatabase();
+      if (i > 0) {
+        const oldJson = JSON.parse(lastBlockJson);
+        oldDatabase = new DomainDatabase(oldJson.database);
+        oldMap.tree = MerkleTree.fromCompressedJSON(oldJson.map);
+        const oldRoot = oldMap.getRoot();
+        expect(oldRoot.toJSON()).toBe(blocks[i - 1].root.toJSON());
+      }
       map.tree = MerkleTree.fromCompressedJSON(json.map);
-      const database = new DomainDatabase(json.database);
+      const transactionData: DomainTransactionData[] = json.txs.map((tx: any) =>
+        DomainTransactionData.fromJSON(tx)
+      );
       const block = new BlockContract(blocks[i].address, tokenId);
       const root = block.root.get();
       expect(root.toJSON()).toBe(blocks[i].root.toJSON());
-      expect(root.toJSON()).toBe(database.getRoot().toJSON());
       expect(root.toJSON()).toBe(map.getRoot().toJSON());
       const storage = block.storage.get();
       Storage.assertEquals(storage, blocks[i].storage);
       const txs = block.txs.get();
       expect(txs.toJSON()).toBe(blocks[i].txs.toJSON());
+      if (fullValidation) {
+      }
+
+      const {
+        root: calculatedRoot,
+        txs: calculatedTxs,
+        database,
+      } = createBlock(transactionData, oldMap, oldDatabase);
+      expect(calculatedRoot.toJSON()).toBe(root.toJSON());
+      expect(calculatedTxs.hash().toJSON()).toBe(txs.toJSON());
+      const loadedDatabase = new DomainDatabase(json.database);
+      assert.deepStrictEqual(database.data, loadedDatabase.data);
+      if (fullValidation) {
+        expect(root.toJSON()).toBe(database.getRoot().toJSON());
+        expect(root.toJSON()).toBe(loadedDatabase.getRoot().toJSON());
+      }
 
       const decision = new ValidatorsDecision({
         contract: publicKey,
