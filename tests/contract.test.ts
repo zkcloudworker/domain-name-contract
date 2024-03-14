@@ -91,7 +91,7 @@ const blocks: Block[] = [];
 let blockJson = "";
 let lastBlockJson = "";
 
-describe("Validators", () => {
+describe("Domain Name Service Contract", () => {
   it(`should prepare blocks data`, async () => {
     console.log("Preparing data...");
     console.time(`prepared data`);
