@@ -16,17 +16,17 @@
     "coverage": "jest --coverage tests/*.test.ts"
   },
   "dependencies": {
-    "adm-zip": "^0.5.10",
+    "adm-zip": "^0.5.12",
     "axios": "^1.6.7",
     "o1js": "^0.17.0",
     "tslib": "^2.6.2",
-    "zkcloudworker": "^0.1.12"
+    "zkcloudworker": "^0.1.15"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
-    "@types/adm-zip": "^0",
+    "@types/adm-zip": "^0.5.5",
     "@types/jest": "^29.5.12",
-    "@types/node": "^20.11.25",
+    "@types/node": "^20.11.27",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.2",
     "typescript": "^5.4.2"
