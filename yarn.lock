@@ -768,7 +768,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/adm-zip@npm:^0":
+"@types/adm-zip@npm:^0.5.5":
   version: 0.5.5
   resolution: "@types/adm-zip@npm:0.5.5"
   dependencies:
@@ -862,12 +862,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*, @types/node@npm:^20.11.25":
+"@types/node@npm:*":
   version: 20.11.26
   resolution: "@types/node@npm:20.11.26"
   dependencies:
     undici-types: "npm:~5.26.4"
   checksum: 10c0/2df81e4f109588c4c490f2c7d616a06d2b3b9298f217468134b80711af810c9a6017a59beb3e6b1c596eb9b6c5a39d33403b99179acb89006badfbc55f2468bb
+  languageName: node
+  linkType: hard
+
+"@types/node@npm:^20.11.27":
+  version: 20.11.27
+  resolution: "@types/node@npm:20.11.27"
+  dependencies:
+    undici-types: "npm:~5.26.4"
+  checksum: 10c0/ec40bea80c60a12b39bd0da9b16333237a84c67ae83c8aa382b88381ae3948943bf6af969442e209270ad3e109f301a6b01ab243f80bd0e69673a877425f9418
   languageName: node
   linkType: hard
 
@@ -901,10 +910,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"adm-zip@npm:^0.5.10":
-  version: 0.5.10
-  resolution: "adm-zip@npm:0.5.10"
-  checksum: 10c0/1f391a4e02940688b6ca6d4b3ea96cc82a9dbe1596671d7dbc052f9a53ed2efa6ba9ba253f032ea16e70081f22d6ddd1af2d65d6be700853cdee9c2fc925c20e
+"adm-zip@npm:^0.5.12":
+  version: 0.5.12
+  resolution: "adm-zip@npm:0.5.12"
+  checksum: 10c0/fca2893b416bfcbee8b371a403f4d2e980a3c1055ce7b9b0b2ac8540c8efe6bbb27cc63ddf64ff6e6ed40c84fcb1ede7e95d230e7a567025e03f1044efbf6be0
   languageName: node
   linkType: hard
 
@@ -1452,17 +1461,17 @@ __metadata:
   resolution: "domain-name-service-contract@workspace:."
   dependencies:
     "@jest/globals": "npm:^29.7.0"
-    "@types/adm-zip": "npm:^0"
+    "@types/adm-zip": "npm:^0.5.5"
     "@types/jest": "npm:^29.5.12"
-    "@types/node": "npm:^20.11.25"
-    adm-zip: "npm:^0.5.10"
+    "@types/node": "npm:^20.11.27"
+    adm-zip: "npm:^0.5.12"
     axios: "npm:^1.6.7"
     jest: "npm:^29.7.0"
     o1js: "npm:^0.17.0"
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
     typescript: "npm:^5.4.2"
-    zkcloudworker: "npm:^0.1.12"
+    zkcloudworker: "npm:^0.1.15"
   languageName: unknown
   linkType: soft
 
@@ -3787,13 +3796,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zkcloudworker@npm:^0.1.12":
-  version: 0.1.12
-  resolution: "zkcloudworker@npm:0.1.12"
+"zkcloudworker@npm:^0.1.15":
+  version: 0.1.15
+  resolution: "zkcloudworker@npm:0.1.15"
   dependencies:
     axios: "npm:^1.6.7"
   peerDependencies:
     o1js: ^0.17.0
-  checksum: 10c0/8e9175a5ff13a57f37242f78148f6adafaee9efafbd36afbff7346ae2b1189b0608debdef8215102e1fca297a3231c84fb9a802e216bac32cfcd2916e253e3ae
+  checksum: 10c0/07d62e8ee012749a15592497fa0597e4f182a89cc0cae13ad243a3f472617488106300899b0f3e3af0d04f80b07060e29d33b927064480546c02ce9f22d4ebc0
   languageName: node
   linkType: hard

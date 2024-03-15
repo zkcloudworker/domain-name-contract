@@ -10,6 +10,7 @@ import {
   AccountUpdate,
   VerificationKey,
   UInt64,
+  JsonProof,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -31,8 +32,10 @@ import {
   calculateValidatorsProof,
 } from "../src/rollup/validators-proof";
 import { Storage } from "../src/contract/storage";
-import { nameContract } from "../src/config";
+import { nameContract, JWT } from "../src/config";
 import {
+  zkCloudWorker,
+  formatTime,
   makeString,
   initBlockchain,
   blockchain,
@@ -50,19 +53,26 @@ import {
 } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
 import { createBlock } from "../src/rollup/blocks";
-import { calculateTransactionsProof } from "../src/rollup/txs-proof";
+import {
+  calculateTransactionsProof,
+  prepareProofData,
+} from "../src/rollup/txs-proof";
 import { MerkleMap } from "../src/lib/merkle-map";
 import { MerkleTree } from "../src/lib/merkle-tree";
 import { DomainDatabase } from "../src/rollup/database";
 
 setNumberOfWorkers(8);
 const network: blockchain = "local";
+const useCloudWorker = true;
+let calculateJobId = "";
+const api = new zkCloudWorker(JWT);
+
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
 const fullValidation = true;
-const ELEMENTS_NUMBER = 4;
-const BLOCKS_NUMBER = 3;
+const ELEMENTS_NUMBER = 1;
+const BLOCKS_NUMBER = 1;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -362,15 +372,57 @@ describe("Domain Name Service Contract", () => {
       console.timeEnd(`block ${i} validated`);
     });
 
-    it.skip(`should prove a block`, async () => {
+    it(`should prove a block`, async () => {
       console.time(`block ${i} proved`);
+      let proof: MapUpdateProof;
+      if (useCloudWorker) {
+        const proofData = await prepareProofData(
+          domainNames[i],
+          proveMap,
+          true
+        );
+        const transactions = proofData.transactions;
+        const update = proofData.state;
+        console.log("sending proofMap job", update.length);
+        let args: string[] = [];
 
-      const proof: MapUpdateProof = await calculateTransactionsProof(
-        domainNames[i],
-        proveMap,
-        mapVerificationKey,
-        true
-      );
+        let apiresult = await api.createJob({
+          name: "nameservice",
+          task: "proofMap",
+          transactions,
+          args,
+          developer: "@staketab",
+        });
+        let startTime = Date.now();
+        console.log("proofMap api call result", apiresult);
+        expect(apiresult.success).toBe(true);
+        expect(apiresult.jobId).toBeDefined();
+        if (apiresult.jobId === undefined) return;
+        calculateJobId = apiresult.jobId;
+        let result = await api.waitForJobResult({ jobId: calculateJobId });
+        let endTime = Date.now();
+        console.log(
+          `Time spent to calculate the proof: ${formatTime(
+            endTime - startTime
+          )} (${endTime - startTime} ms)`
+        );
+        //console.log("api call result", result);
+        expect(result.success).toBe(true);
+        if (result.success === false) return;
+        proof = MapUpdateProof.fromJSON(
+          JSON.parse(result.result.result) as JsonProof
+        );
+        //console.log("proof", proof);
+        expect(proof).toBeDefined();
+        if (proof === undefined) return;
+      } else {
+        proof = await calculateTransactionsProof(
+          domainNames[i],
+          proveMap,
+          mapVerificationKey,
+          true
+        );
+      }
 
       const tx = await Mina.transaction({ sender }, () => {
         zkApp.proveBlock(proof, blocks[i].address);
