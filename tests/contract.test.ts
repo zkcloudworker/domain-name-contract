@@ -71,7 +71,7 @@ const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
 const fullValidation = true;
-const ELEMENTS_NUMBER = 1;
+const ELEMENTS_NUMBER = 8;
 const BLOCKS_NUMBER = 1;
 const domainNames: DomainTransactionData[][] = [];
 
