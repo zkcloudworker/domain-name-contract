@@ -72,7 +72,7 @@ const { privateKey: deployer, publicKey: sender } = keys[0];
 
 const fullValidation = true;
 const ELEMENTS_NUMBER = 2;
-const BLOCKS_NUMBER = 20;
+const BLOCKS_NUMBER = 30;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -515,6 +515,14 @@ async function proveBlocks(): Promise<boolean> {
       */
     let result = await api.jobResult({ jobId });
     //expect(result.success).toBe(true);
+    if (result.success === false) {
+      await sleep(10000);
+      result = await api.jobResult({ jobId });
+    }
+    if (result.success === false) {
+      await sleep(20000);
+      result = await api.jobResult({ jobId });
+    }
     if (result.success === false) return false;
     if (result.result?.result !== undefined) {
       //console.log(`job result for block ${j}`, result.result.result);
@@ -541,6 +549,9 @@ async function proveBlocks(): Promise<boolean> {
       blocks[blockIndex].isProved = true;
       console.timeEnd(`block ${blockIndex} proved`);
       return true;
+    } else {
+      console.log(`No result for block ${blockIndex}`, result);
+      return false;
     }
   }
   return false;
