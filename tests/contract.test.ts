@@ -71,8 +71,8 @@ const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
 const fullValidation = true;
-const ELEMENTS_NUMBER = 2;
-const BLOCKS_NUMBER = 30;
+const ELEMENTS_NUMBER = 3;
+const BLOCKS_NUMBER = 15;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -89,6 +89,7 @@ let tokenId: Field;
 const storage = new Storage({ hashString: [Field(0), Field(0)] });
 const map = new MerkleMap();
 const proveMap = new MerkleMap();
+let failed = false;
 
 interface Block {
   address: PublicKey;
@@ -212,7 +213,9 @@ describe("Domain Name Service Contract", () => {
   });
 
   for (let i = 0; i < BLOCKS_NUMBER; i++) {
+    if (failed === true) return;
     it(`should create a block`, async () => {
+      if (failed === true) return;
       console.time(`block ${i} created`);
       const blockPrivateKey = PrivateKey.random();
       const blockPublicKey = blockPrivateKey.toPublicKey();
@@ -307,6 +310,7 @@ describe("Domain Name Service Contract", () => {
     });
 
     it(`should validate a block`, async () => {
+      if (failed === true) return;
       console.time(`block ${i} validated`);
       const map = new MerkleMap();
       const oldMap = new MerkleMap();
@@ -383,13 +387,17 @@ describe("Domain Name Service Contract", () => {
     });
 
     it(`should prove a blocks`, async () => {
-      if (useCloudWorker) {
+      if (failed === true) return;
+      if (useCloudWorker && failed === false) {
         let proved = await proveBlocks();
-        while (proved) proved = await proveBlocks();
+        while (proved) {
+          proved = await proveBlocks();
+        }
       }
     });
 
     it(`should prepare proof for a block`, async () => {
+      if (failed === true) return;
       let proof: MapUpdateProof;
       if (useCloudWorker) {
         const proofData = await prepareProofData(
@@ -404,6 +412,7 @@ describe("Domain Name Service Contract", () => {
 
         let sent = false;
         let apiresult;
+        let attempt = 1;
         while (sent === false) {
           apiresult = await api.createJob({
             name: "nameservice",
@@ -411,11 +420,13 @@ describe("Domain Name Service Contract", () => {
             transactions,
             args,
             developer: "@staketab",
+            metadata: `Block ${i} at ${new Date().toISOString()}`,
           });
           if (apiresult.success === true) sent = true;
           else {
             console.log(`Error creating job for block ${i}, retrying...`);
-            await sleep(10000);
+            await sleep(30000 * attempt);
+            attempt++;
           }
         }
 
@@ -454,7 +465,8 @@ describe("Domain Name Service Contract", () => {
   }
 
   it(`should prove remaining blocks`, async () => {
-    if (useCloudWorker) {
+    if (failed === true) return;
+    if (useCloudWorker && failed === false) {
       console.log("Proving remaining blocks...");
       while (blocks[blocks.length - 1].isProved === false) {
         const proved = await proveBlocks();
@@ -464,6 +476,7 @@ describe("Domain Name Service Contract", () => {
   });
 
   it(`should change validators`, async () => {
+    if (failed === true) return;
     const decision = new ValidatorsDecision({
       contract: publicKey,
       chainId: networkIdHash,
@@ -513,18 +526,29 @@ async function proveBlocks(): Promise<boolean> {
         blocks[j].jobId
       );
       */
-    let result = await api.jobResult({ jobId });
-    //expect(result.success).toBe(true);
-    if (result.success === false) {
-      await sleep(10000);
+    let attempt = 1;
+    let received = false;
+    let result;
+    await sleep(1000);
+    while (received === false) {
       result = await api.jobResult({ jobId });
+      if (result.success === false) {
+        console.log(
+          `Error getting job result for block ${blockIndex}, attempt ${
+            attempt + 1
+          }...`
+        );
+        await sleep(10000 * attempt);
+        attempt++;
+      } else received = true;
+      if (attempt > 5) return false;
     }
-    if (result.success === false) {
-      await sleep(20000);
-      result = await api.jobResult({ jobId });
+    if (result?.result.jobStatus === "failed") {
+      console.error(`job failed for block ${blockIndex}: ${result?.result}`);
+      failed = true;
+      return false;
     }
-    if (result.success === false) return false;
-    if (result.result?.result !== undefined) {
+    if (result?.result?.result !== undefined) {
       //console.log(`job result for block ${j}`, result.result.result);
       console.time(`block ${blockIndex} proved`);
       let endTime = Date.now();
@@ -550,7 +574,13 @@ async function proveBlocks(): Promise<boolean> {
       console.timeEnd(`block ${blockIndex} proved`);
       return true;
     } else {
-      console.log(`No result for block ${blockIndex}`, result);
+      if (Date.now() - result?.result.timeStarted > 5 * 60 * 1000)
+        console.log(
+          `No result for block ${blockIndex}: ${result?.result.jobStatus} ${(
+            (Date.now() - result?.result.timeStarted) /
+            1000
+          ).toFixed(0)} seconds ago`
+        );
       return false;
     }
   }

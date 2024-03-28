@@ -1482,7 +1482,7 @@ __metadata:
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
     typescript: "npm:^5.4.3"
-    zkcloudworker: "npm:^0.1.16"
+    zkcloudworker: "npm:^0.1.17"
   languageName: unknown
   linkType: soft
 
@@ -3817,13 +3817,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zkcloudworker@npm:^0.1.16":
-  version: 0.1.16
-  resolution: "zkcloudworker@npm:0.1.16"
+"zkcloudworker@npm:^0.1.17":
+  version: 0.1.17
+  resolution: "zkcloudworker@npm:0.1.17"
   dependencies:
     axios: "npm:^1.6.7"
   peerDependencies:
     o1js: ^0.17.0
-  checksum: 10c0/f142a7f242e32a6cdb6acd5486f0bf37755052d849f701db40d6338f6aa68daac48bad033052fbbd83c5df107f3af9423156e6e8735365635e8d4ee2572c2fe1
+  checksum: 10c0/2a4760ec51cdb1c69a8a8ef58a115da00a6137e741a7ad7fea1df474451ca0b0c07d56b85008d4ada5741e327db8866680e011a69809337fb2c507a649c30421
   languageName: node
   linkType: hard
