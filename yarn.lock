@@ -871,12 +871,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^20.11.30":
-  version: 20.11.30
-  resolution: "@types/node@npm:20.11.30"
+"@types/node@npm:^20.12.2":
+  version: 20.12.2
+  resolution: "@types/node@npm:20.12.2"
   dependencies:
     undici-types: "npm:~5.26.4"
-  checksum: 10c0/867cfaf969c6d8850d8d7304e7ab739898a50ecb1395b61ff2335644f5f48d7a46fbc4a14cee967aed65ec134b61a746edae70d1f32f11321ccf29165e3bc4e6
+  checksum: 10c0/bb47d115a8f95aadebdd6403fee16d149d6b5568ad53bacc42df34c2d572561e36ba47b05f7f68bada43752d7369b470a90df65b646af7502dfb799a21b4fca7
   languageName: node
   linkType: hard
 
@@ -1017,18 +1017,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"axios@npm:^1.6.7":
-  version: 1.6.7
-  resolution: "axios@npm:1.6.7"
-  dependencies:
-    follow-redirects: "npm:^1.15.4"
-    form-data: "npm:^4.0.0"
-    proxy-from-env: "npm:^1.1.0"
-  checksum: 10c0/131bf8e62eee48ca4bd84e6101f211961bf6a21a33b95e5dfb3983d5a2fe50d9fffde0b57668d7ce6f65063d3dc10f2212cbcb554f75cfca99da1c73b210358d
-  languageName: node
-  linkType: hard
-
-"axios@npm:^1.6.8":
+"axios@npm:^1.6.7, axios@npm:^1.6.8":
   version: 1.6.8
   resolution: "axios@npm:1.6.8"
   dependencies:
@@ -1474,7 +1463,7 @@ __metadata:
     "@jest/globals": "npm:^29.7.0"
     "@types/adm-zip": "npm:^0.5.5"
     "@types/jest": "npm:^29.5.12"
-    "@types/node": "npm:^20.11.30"
+    "@types/node": "npm:^20.12.2"
     adm-zip: "npm:^0.5.12"
     axios: "npm:^1.6.8"
     jest: "npm:^29.7.0"
@@ -1482,7 +1471,7 @@ __metadata:
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
     typescript: "npm:^5.4.3"
-    zkcloudworker: "npm:^0.1.17"
+    zkcloudworker: "npm:^0.2.2"
   languageName: unknown
   linkType: soft
 
@@ -1660,16 +1649,6 @@ __metadata:
     locate-path: "npm:^5.0.0"
     path-exists: "npm:^4.0.0"
   checksum: 10c0/0406ee89ebeefa2d507feb07ec366bebd8a6167ae74aa4e34fb4c4abd06cf782a3ce26ae4194d70706f72182841733f00551c209fe575cb00bd92104056e78c1
-  languageName: node
-  linkType: hard
-
-"follow-redirects@npm:^1.15.4":
-  version: 1.15.5
-  resolution: "follow-redirects@npm:1.15.5"
-  peerDependenciesMeta:
-    debug:
-      optional: true
-  checksum: 10c0/418d71688ceaf109dfd6f85f747a0c75de30afe43a294caa211def77f02ef19865b547dfb73fde82b751e1cc507c06c754120b848fe5a7400b0a669766df7615
   languageName: node
   linkType: hard
 
@@ -3817,13 +3796,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zkcloudworker@npm:^0.1.17":
-  version: 0.1.17
-  resolution: "zkcloudworker@npm:0.1.17"
+"zkcloudworker@npm:^0.2.2":
+  version: 0.2.2
+  resolution: "zkcloudworker@npm:0.2.2"
   dependencies:
     axios: "npm:^1.6.7"
   peerDependencies:
     o1js: ^0.17.0
-  checksum: 10c0/2a4760ec51cdb1c69a8a8ef58a115da00a6137e741a7ad7fea1df474451ca0b0c07d56b85008d4ada5741e327db8866680e011a69809337fb2c507a649c30421
+  checksum: 10c0/4863f3e108323b59fb69f1f83b80b1c4825b21277bd0b88ab4102d7f701cb0c8b9f26a931e3f5df88ce8bb978d9f501a1611a93ea0ed8754e81b6922d545ca01
   languageName: node
   linkType: hard

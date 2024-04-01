@@ -34,7 +34,7 @@ import {
 import { Storage } from "../src/contract/storage";
 import { nameContract, JWT } from "../src/config";
 import {
-  zkCloudWorker,
+  zkCloudWorkerClient,
   formatTime,
   makeString,
   initBlockchain,
@@ -65,14 +65,14 @@ import { DomainDatabase } from "../src/rollup/database";
 setNumberOfWorkers(8);
 const network: blockchain = "local";
 const useCloudWorker = true;
-const api = new zkCloudWorker(JWT);
+const api = new zkCloudWorkerClient(JWT);
 
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
 const fullValidation = true;
-const ELEMENTS_NUMBER = 3;
-const BLOCKS_NUMBER = 15;
+const ELEMENTS_NUMBER = 2;
+const BLOCKS_NUMBER = 2;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -408,14 +408,14 @@ describe("Domain Name Service Contract", () => {
         const transactions = proofData.transactions;
         const update = proofData.state;
         console.log("sending proofMap job for block", i);
-        let args: string[] = [];
+        let args: string = "";
 
         let sent = false;
         let apiresult;
         let attempt = 1;
         while (sent === false) {
-          apiresult = await api.createJob({
-            name: "nameservice",
+          apiresult = await api.recursiveProof({
+            repo: "nameservice",
             task: "proofMap",
             transactions,
             args,

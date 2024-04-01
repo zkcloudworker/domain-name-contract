@@ -92,6 +92,7 @@ export class BlockContract extends SmartContract {
   @state(Storage) storage = State<Storage>();
   @state(Bool) isFinal = State<Bool>();
   @state(Bool) isValidated = State<Bool>();
+  // TODO: pack Bool vars into one Field and add block number, add more statuses
 
   deploy(args: DeployArgs) {
     super.deploy(args);
