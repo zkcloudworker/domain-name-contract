@@ -871,12 +871,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^20.12.2":
-  version: 20.12.2
-  resolution: "@types/node@npm:20.12.2"
+"@types/node@npm:^20.12.3":
+  version: 20.12.3
+  resolution: "@types/node@npm:20.12.3"
   dependencies:
     undici-types: "npm:~5.26.4"
-  checksum: 10c0/bb47d115a8f95aadebdd6403fee16d149d6b5568ad53bacc42df34c2d572561e36ba47b05f7f68bada43752d7369b470a90df65b646af7502dfb799a21b4fca7
+  checksum: 10c0/45c8485a0e55276b42c26ba1df6c480e4e1a3a3abbf4ea0ff6b4e2823c4f77e32b7e166d4263d464f207cfea5bd4de8879b8df2c7132a727b0346a30191d6bea
   languageName: node
   linkType: hard
 
@@ -1017,7 +1017,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"axios@npm:^1.6.7, axios@npm:^1.6.8":
+"axios@npm:^1.6.8":
   version: 1.6.8
   resolution: "axios@npm:1.6.8"
   dependencies:
@@ -1463,7 +1463,7 @@ __metadata:
     "@jest/globals": "npm:^29.7.0"
     "@types/adm-zip": "npm:^0.5.5"
     "@types/jest": "npm:^29.5.12"
-    "@types/node": "npm:^20.12.2"
+    "@types/node": "npm:^20.12.3"
     adm-zip: "npm:^0.5.12"
     axios: "npm:^1.6.8"
     jest: "npm:^29.7.0"
@@ -1471,7 +1471,7 @@ __metadata:
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
     typescript: "npm:^5.4.3"
-    zkcloudworker: "npm:^0.2.2"
+    zkcloudworker: "npm:^0.2.7"
   languageName: unknown
   linkType: soft
 
@@ -3796,13 +3796,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zkcloudworker@npm:^0.2.2":
-  version: 0.2.2
-  resolution: "zkcloudworker@npm:0.2.2"
+"zkcloudworker@npm:^0.2.7":
+  version: 0.2.7
+  resolution: "zkcloudworker@npm:0.2.7"
   dependencies:
-    axios: "npm:^1.6.7"
+    axios: "npm:^1.6.8"
   peerDependencies:
     o1js: ^0.17.0
-  checksum: 10c0/4863f3e108323b59fb69f1f83b80b1c4825b21277bd0b88ab4102d7f701cb0c8b9f26a931e3f5df88ce8bb978d9f501a1611a93ea0ed8754e81b6922d545ca01
+  checksum: 10c0/ff1783bd9ef5bf04474d0a7c7d00424fedf0c01b374d0ade2fc51e299632c44dc9c3c56b0085e3fc19e5bf4294745d654206ce3560792d4faf99a3acb5914231
   languageName: node
   linkType: hard
