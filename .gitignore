@@ -4,6 +4,7 @@ dist/
 node_modules/
 .yarn/
 data/
+cache/
 
 domain-name-service-contract.zip
 
