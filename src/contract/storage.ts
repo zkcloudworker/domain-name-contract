@@ -1,5 +1,6 @@
 import { Struct, Field } from "o1js";
 import axios from "axios";
+import { makeString } from "zkcloudworker";
 
 /**
  * Storage is the hash of the IPFS or Arweave storage where the metadata is written
@@ -24,10 +25,22 @@ export class Storage extends Struct({
   }
 }
 
+const ipfsData: { [key: string]: string } = {};
+let useLocalIpfsData = false;
+
 export async function saveToIPFS(
   data: any,
   PinataJWT: string | undefined
 ): Promise<string | undefined> {
+  if (PinataJWT === "local") {
+    const hash = makeString(
+      `QmTosaezLecDB7bAoUoXcrJzeBavHNZyPbPff1QHWw8xus`.length
+    );
+    ipfsData[hash] = JSON.stringify(data, null, 2);
+    useLocalIpfsData = true;
+    return hash;
+  }
+
   try {
     const str = JSON.stringify(data, null, 2);
     const auth = "Bearer " + PinataJWT ?? "";
@@ -58,6 +71,9 @@ export async function saveToIPFS(
 }
 
 export async function loadFromIPFS(hash: string): Promise<any | undefined> {
+  if (useLocalIpfsData) {
+    return JSON.parse(ipfsData[hash]);
+  }
   try {
     const url =
       "https://salmon-effective-amphibian-898.mypinata.cloud/ipfs/" +

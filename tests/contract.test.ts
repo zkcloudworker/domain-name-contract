@@ -12,6 +12,7 @@ import {
   UInt64,
   JsonProof,
   verify,
+  Bool,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -26,6 +27,7 @@ import {
   BlockContract,
   BlockData,
   NewBlockTransactions,
+  Flags,
 } from "../src/contract/domain-contract";
 import { stringToFields } from "../src/lib/hash";
 import {
@@ -67,10 +69,11 @@ import { zkcloudworker } from "../src/worker";
 setNumberOfWorkers(8);
 const network: blockchain = "local";
 const useLocalCloudWorker = true;
-const api = new zkCloudWorkerClient(
-  useLocalCloudWorker ? "local" : JWT,
-  zkcloudworker
-);
+const api = new zkCloudWorkerClient({
+  jwt: useLocalCloudWorker ? "local" : JWT,
+  zkcloudworker,
+  chain: "local",
+});
 
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
@@ -107,6 +110,7 @@ interface Block {
   jobId?: string;
   proofStartTime?: number;
   isProved: boolean;
+  blockNumber: number;
 }
 const blocks: Block[] = [];
 
@@ -218,10 +222,11 @@ describe("Domain Name Service Contract", () => {
   });
 
   for (let i = 0; i < BLOCKS_NUMBER; i++) {
+    const blockNumber = i + 1;
     if (failed === true) return;
     it(`should create a block`, async () => {
       if (failed === true) return;
-      console.time(`block ${i} created`);
+      console.time(`block ${blockNumber} created`);
       const blockPrivateKey = PrivateKey.random();
       const blockPublicKey = blockPrivateKey.toPublicKey();
       const blockProducerPrivateKey = PrivateKey.random();
@@ -257,7 +262,7 @@ describe("Domain Name Service Contract", () => {
       const strJson = JSON.stringify(json, null, 2);
       const strMapJson = JSON.stringify(mapJson, null, 2);
       console.log(
-        `Block ${i} JSON size: ${strJson.length.toLocaleString()}, map JSON size: ${strMapJson.length.toLocaleString()}`
+        `Block ${blockNumber} JSON size: ${strJson.length.toLocaleString()}, map JSON size: ${strMapJson.length.toLocaleString()}`
       );
 
       blocks.push({
@@ -269,6 +274,7 @@ describe("Domain Name Service Contract", () => {
         json: strJson,
         mapJson: strMapJson,
         isProved: false,
+        blockNumber,
       });
 
       const decision = new ValidatorsDecision({
@@ -298,6 +304,11 @@ describe("Domain Name Service Contract", () => {
         root,
         storage: storage,
         txs,
+        isFinal: Bool(false),
+        isProved: Bool(false),
+        isInvalid: Bool(false),
+        isValidated: Bool(false),
+        blockNumber: Field(blockNumber),
       });
       const signature = Signature.create(
         blockProducerPrivateKey,
@@ -311,7 +322,7 @@ describe("Domain Name Service Contract", () => {
 
       await tx.prove();
       await tx.sign([deployer, blockPrivateKey]).send();
-      console.timeEnd(`block ${i} created`);
+      console.timeEnd(`block ${blockNumber} created`);
     });
 
     it(`should validate a block`, async () => {
@@ -419,7 +430,7 @@ describe("Domain Name Service Contract", () => {
           transactions,
           args,
           developer: "@staketab",
-          metadata: `Block ${i} at ${new Date().toISOString()}`,
+          metadata: `Block ${blockNumber} at ${new Date().toISOString()}`,
         });
         if (apiresult.success === true) sent = true;
         else {
@@ -436,7 +447,7 @@ describe("Domain Name Service Contract", () => {
       expect(apiresult.jobId).toBeDefined();
       console.log(
         "proofMap job created for block",
-        i,
+        blockNumber,
         ", jobId:",
         apiresult.jobId
       );
