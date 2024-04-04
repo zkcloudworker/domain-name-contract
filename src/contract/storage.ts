@@ -1,4 +1,4 @@
-import { Struct, Field } from "o1js";
+import { Struct, Field, Encoding } from "o1js";
 import axios from "axios";
 import { makeString } from "zkcloudworker";
 
@@ -22,6 +22,19 @@ export class Storage extends Struct({
   static assertEquals(a: Storage, b: Storage) {
     a.hashString[0].assertEquals(b.hashString[0]);
     a.hashString[1].assertEquals(b.hashString[1]);
+  }
+
+  static fromIpfsHash(hash: string): Storage {
+    const fields = Encoding.stringToFields("i:" + hash);
+    if (fields.length !== 2) throw new Error("Invalid IPFS hash");
+    return new Storage({ hashString: [fields[0], fields[1]] });
+  }
+
+  toIpfsHash(): string {
+    const hash = Encoding.stringFromFields(this.hashString);
+    if (hash.startsWith("i:")) {
+      return hash.substring(2);
+    } else throw new Error("Invalid IPFS hash");
   }
 }
 

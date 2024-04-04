@@ -65,9 +65,11 @@ import { MerkleMap } from "../src/lib/merkle-map";
 import { MerkleTree } from "../src/lib/merkle-tree";
 import { DomainDatabase } from "../src/rollup/database";
 import { zkcloudworker } from "../src/worker";
+import { saveToIPFS, loadFromIPFS } from "../src/contract/storage";
 
 setNumberOfWorkers(8);
 const network: blockchain = "local";
+const pinataJWT = "local";
 const useLocalCloudWorker = true;
 const api = new zkCloudWorkerClient({
   jwt: useLocalCloudWorker ? "local" : JWT,
@@ -79,8 +81,8 @@ const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
 const fullValidation = true;
-const ELEMENTS_NUMBER = 2;
-const BLOCKS_NUMBER = 2;
+const ELEMENTS_NUMBER = 3;
+const BLOCKS_NUMBER = 3;
 const domainNames: DomainTransactionData[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -94,7 +96,6 @@ let verificationKey: VerificationKey;
 let blockVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
 let tokenId: Field;
-const storage = new Storage({ hashString: [Field(0), Field(0)] });
 const map = new MerkleMap();
 const proveMap = new MerkleMap();
 let failed = false;
@@ -105,8 +106,8 @@ interface Block {
   root: Field;
   count: Field;
   storage: Storage;
-  json: string;
-  mapJson: string;
+  //json: string;
+  //mapJson: string;
   jobId?: string;
   proofStartTime?: number;
   isProved: boolean;
@@ -118,6 +119,7 @@ describe("Domain Name Service Contract", () => {
   it(`should prepare blocks data`, async () => {
     console.log("Preparing data...");
     console.time(`prepared data`);
+    const nftStorage = new Storage({ hashString: [Field(0), Field(0)] });
     for (let j = 0; j < BLOCKS_NUMBER; j++) {
       const blockElements: DomainTransactionData[] = [];
       for (let i = 0; i < ELEMENTS_NUMBER; i++) {
@@ -129,7 +131,7 @@ describe("Domain Name Service Contract", () => {
               data: Field(0),
               kind: Field(0),
             }),
-            storage,
+            storage: nftStorage,
             expiry: UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 365),
           }),
         });
@@ -235,8 +237,17 @@ describe("Domain Name Service Contract", () => {
       let oldDatabase: DomainDatabase = new DomainDatabase();
       let map = new MerkleMap();
       if (i > 0) {
-        const json = JSON.parse(blocks[i - 1].json);
-        const mapJson = JSON.parse(blocks[i - 1].mapJson);
+        const lastBlock = zkApp.lastBlock.get();
+        const block = new BlockContract(lastBlock, tokenId);
+        const storage = block.storage.get();
+        const hash = storage.toIpfsHash();
+        const data = await loadFromIPFS(hash);
+        const json = JSON.parse(data);
+        if (json.map === undefined) throw new Error("json.map is undefined");
+        if (json.map.startsWith("i:") === false)
+          throw new Error("json.map does not start with 'i:'");
+        const mapData = await loadFromIPFS(json.map.substring(2));
+        const mapJson = JSON.parse(mapData);
         map.tree = MerkleTree.fromCompressedJSON(mapJson.map);
         oldDatabase = new DomainDatabase(json.database);
       }
@@ -246,33 +257,42 @@ describe("Domain Name Service Contract", () => {
         map,
         oldDatabase
       );
-      const json = {
-        txs: domainNames[i].map((tx) => tx.toJSON()),
-        database: database.data,
-      };
       const mapJson = {
         map: map.tree.toCompressedJSON(),
       };
+      const strMapJson = JSON.stringify(mapJson, null, 2);
+      const mapHash = await saveToIPFS(strMapJson, pinataJWT);
+      expect(mapHash).toBeDefined();
+      if (mapHash === undefined) throw new Error("mapHash is undefined");
+      const json = {
+        txs: domainNames[i].map((tx) => tx.toJSON()),
+        database: database.data,
+        map: "i:" + mapHash,
+      };
+      const strJson = JSON.stringify(json, null, 2);
+      const hash = await saveToIPFS(strJson, pinataJWT);
+      expect(hash).toBeDefined();
+      if (hash === undefined) throw new Error("hash is undefined");
+
       if (fullValidation) {
         expect(root.toJSON()).toBe(database.getRoot().toJSON());
         const restoredMap = new MerkleMap();
         restoredMap.tree = MerkleTree.fromCompressedJSON(mapJson.map);
         expect(restoredMap.getRoot().toJSON()).toBe(root.toJSON());
       }
-      const strJson = JSON.stringify(json, null, 2);
-      const strMapJson = JSON.stringify(mapJson, null, 2);
+
       console.log(
         `Block ${blockNumber} JSON size: ${strJson.length.toLocaleString()}, map JSON size: ${strMapJson.length.toLocaleString()}`
       );
+
+      const blockStorage = Storage.fromIpfsHash(hash);
 
       blocks.push({
         address: blockPublicKey,
         txs: txs.hash(),
         count: txs.count,
         root,
-        storage,
-        json: strJson,
-        mapJson: strMapJson,
+        storage: blockStorage,
         isProved: false,
         blockNumber,
       });
@@ -302,7 +322,7 @@ describe("Domain Name Service Contract", () => {
       const blockData: BlockData = new BlockData({
         address: blockPublicKey,
         root,
-        storage: storage,
+        storage: blockStorage,
         txs,
         isFinal: Bool(false),
         isProved: Bool(false),
@@ -327,17 +347,43 @@ describe("Domain Name Service Contract", () => {
 
     it(`should validate a block`, async () => {
       if (failed === true) return;
-      console.time(`block ${i} validated`);
+      console.time(`block ${blockNumber} validated`);
       const map = new MerkleMap();
       const oldMap = new MerkleMap();
-      const json = JSON.parse(blocks[i].json);
-      const mapJson = JSON.parse(blocks[i].mapJson);
+      const blockAddress = blocks[i].address;
+      const block = new BlockContract(blockAddress, tokenId);
+      const blockStorage = block.storage.get();
+      const hash = blockStorage.toIpfsHash();
+      const data = await loadFromIPFS(hash);
+      const json = JSON.parse(data);
+      if (json.map === undefined) throw new Error("json.map is undefined");
+      if (json.map.startsWith("i:") === false)
+        throw new Error("json.map does not start with 'i:'");
+      const mapData = await loadFromIPFS(json.map.substring(2));
+      const mapJson = JSON.parse(mapData);
       let oldDatabase = new DomainDatabase();
-      if (i > 0) {
-        const oldJson = JSON.parse(blocks[i - 1].json);
-        const oldMapJson = JSON.parse(blocks[i - 1].mapJson);
-        oldDatabase = new DomainDatabase(oldJson.database);
-        oldMap.tree = MerkleTree.fromCompressedJSON(oldMapJson.map);
+      const previousBlockAddress = block.previousBlock.get();
+      const previousBlock = new BlockContract(previousBlockAddress, tokenId);
+      const previousBlockNumber = Number(
+        previousBlock.blockNumber.get().toBigInt()
+      );
+      //console.log("previousBlockNumber", previousBlockNumber);
+      if (previousBlockNumber > 0) {
+        const previousBlockStorage = previousBlock.storage.get();
+        const previousBlockHash = previousBlockStorage.toIpfsHash();
+        const previousBlockData = await loadFromIPFS(previousBlockHash);
+        const previousBlockJson = JSON.parse(previousBlockData);
+        //console.log("previousBlockJson map:", previousBlockJson.map);
+        if (previousBlockJson.map === undefined)
+          throw new Error("previousBlockJson.map is undefined");
+        if (previousBlockJson.map.startsWith("i:") === false)
+          throw new Error("previousBlockJson.map does not start with 'i:'");
+        const previousBlockMapData = await loadFromIPFS(
+          previousBlockJson.map.substring(2)
+        );
+        const previousBlockMapJson = JSON.parse(previousBlockMapData);
+        oldDatabase = new DomainDatabase(previousBlockJson.database);
+        oldMap.tree = MerkleTree.fromCompressedJSON(previousBlockMapJson.map);
         const oldRoot = oldMap.getRoot();
         expect(oldRoot.toJSON()).toBe(blocks[i - 1].root.toJSON());
       }
@@ -345,7 +391,6 @@ describe("Domain Name Service Contract", () => {
       const transactionData: DomainTransactionData[] = json.txs.map((tx: any) =>
         DomainTransactionData.fromJSON(tx)
       );
-      const block = new BlockContract(blocks[i].address, tokenId);
       const root = block.root.get();
       expect(root.toJSON()).toBe(blocks[i].root.toJSON());
       expect(root.toJSON()).toBe(map.getRoot().toJSON());
@@ -353,8 +398,6 @@ describe("Domain Name Service Contract", () => {
       Storage.assertEquals(storage, blocks[i].storage);
       const txs = block.txs.get();
       expect(txs.toJSON()).toBe(blocks[i].txs.toJSON());
-      if (fullValidation) {
-      }
 
       const {
         root: calculatedRoot,
@@ -365,10 +408,8 @@ describe("Domain Name Service Contract", () => {
       expect(calculatedTxs.hash().toJSON()).toBe(txs.toJSON());
       const loadedDatabase = new DomainDatabase(json.database);
       assert.deepStrictEqual(database.data, loadedDatabase.data);
-      if (fullValidation) {
-        expect(root.toJSON()).toBe(database.getRoot().toJSON());
-        expect(root.toJSON()).toBe(loadedDatabase.getRoot().toJSON());
-      }
+      expect(root.toJSON()).toBe(database.getRoot().toJSON());
+      expect(root.toJSON()).toBe(loadedDatabase.getRoot().toJSON());
 
       const decision = new ValidatorsDecision({
         contract: publicKey,
@@ -399,7 +440,9 @@ describe("Domain Name Service Contract", () => {
 
       await tx.prove();
       await tx.sign([deployer]).send();
-      console.timeEnd(`block ${i} validated`);
+      const flags = block.flags.get();
+      expect(Flags.fromField(flags).isValidated.toBoolean()).toBe(true);
+      console.timeEnd(`block ${blockNumber} validated`);
     });
 
     it(`should prove a blocks`, async () => {
@@ -415,7 +458,6 @@ describe("Domain Name Service Contract", () => {
       let proof: MapUpdateProof;
       const proofData = await prepareProofData(domainNames[i], proveMap, true);
       const transactions = proofData.transactions;
-      const update = proofData.state;
       console.log("sending proofMap job for block", i);
       let startTime = Date.now();
       let args: string = "";
@@ -509,6 +551,7 @@ async function proveBlocks(): Promise<boolean> {
     } else blockIndex++;
   }
   if (!found) return false;
+  const blockNumber = blockIndex + 1;
   const jobId = blocks[blockIndex].jobId;
   if (jobId !== undefined) {
     /*
@@ -525,7 +568,7 @@ async function proveBlocks(): Promise<boolean> {
       result = await api.jobResult({ jobId });
       if (result.success === false) {
         console.log(
-          `Error getting job result for block ${blockIndex}, attempt ${
+          `Error getting job result for block ${blockNumber}, attempt ${
             attempt + 1
           }...`
         );
@@ -541,11 +584,11 @@ async function proveBlocks(): Promise<boolean> {
     }
     if (result?.result?.result !== undefined) {
       //console.log(`job result for block ${j}`, result.result.result);
-      console.time(`block ${blockIndex} proved`);
+      console.time(`block ${blockNumber} proved`);
       let endTime = Date.now();
       const startTime = blocks[blockIndex].proofStartTime ?? 0;
       console.log(
-        `Time spent to calculate the proof for block ${blockIndex}: ${formatTime(
+        `Time spent to calculate the proof for block ${blockNumber}: ${formatTime(
           endTime - startTime
         )} (${endTime - startTime} ms)`
       );
@@ -565,12 +608,15 @@ async function proveBlocks(): Promise<boolean> {
       await tx.prove();
       await tx.sign([deployer]).send();
       blocks[blockIndex].isProved = true;
-      console.timeEnd(`block ${blockIndex} proved`);
+      const block = new BlockContract(blocks[blockIndex].address, tokenId);
+      const flags = block.flags.get();
+      expect(Flags.fromField(flags).isProved.toBoolean()).toBe(true);
+      console.timeEnd(`block ${blockNumber} proved`);
       return true;
     } else {
       if (Date.now() - result?.result.timeStarted > 5 * 60 * 1000)
         console.log(
-          `No result for block ${blockIndex}: ${result?.result.jobStatus} ${(
+          `No result for block ${blockNumber}: ${result?.result.jobStatus} ${(
             (Date.now() - result?.result.timeStarted) /
             1000
           ).toFixed(0)} seconds ago`
