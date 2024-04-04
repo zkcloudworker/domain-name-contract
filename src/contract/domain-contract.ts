@@ -37,11 +37,41 @@ export class NewBlockTransactions extends Struct({
   }
 }
 const a = new NewBlockTransactions({ value: Field(1), count: Field(2) });
+
+export class Flags extends Struct({
+  isValidated: Bool,
+  isProved: Bool,
+  isFinal: Bool,
+  isInvalid: Bool,
+}) {
+  toField(): Field {
+    return Field.fromBits([
+      this.isValidated,
+      this.isProved,
+      this.isFinal,
+      this.isInvalid,
+    ]);
+  }
+  static fromField(f: Field) {
+    const bits = f.toBits(4);
+    return new Flags({
+      isValidated: bits[0],
+      isProved: bits[1],
+      isFinal: bits[2],
+      isInvalid: bits[3],
+    });
+  }
+}
 export class BlockData extends Struct({
-  txs: NewBlockTransactions,
   root: Field,
+  txs: NewBlockTransactions,
   storage: Storage,
   address: PublicKey,
+  blockNumber: Field,
+  isValidated: Bool,
+  isFinal: Bool,
+  isProved: Bool,
+  isInvalid: Bool,
 }) {
   toState(previousBlock: PublicKey): Field[] {
     return [
@@ -49,8 +79,13 @@ export class BlockData extends Struct({
       this.txs.hash(),
       ...previousBlock.toFields(),
       ...Storage.toFields(this.storage),
-      Bool(false).toField(),
-      Bool(false).toField(),
+      new Flags({
+        isValidated: this.isValidated,
+        isProved: this.isProved,
+        isFinal: this.isFinal,
+        isInvalid: this.isInvalid,
+      }).toField(),
+      this.blockNumber,
     ];
   }
 }
@@ -90,8 +125,8 @@ export class BlockContract extends SmartContract {
   @state(Field) txs = State<Field>();
   @state(PublicKey) previousBlock = State<PublicKey>();
   @state(Storage) storage = State<Storage>();
-  @state(Bool) isFinal = State<Bool>();
-  @state(Bool) isValidated = State<Bool>();
+  @state(Field) flags = State<Field>();
+  @state(Field) blockNumber = State<Field>();
   // TODO: pack Bool vars into one Field and add block number, add more statuses
 
   deploy(args: DeployArgs) {
@@ -111,51 +146,59 @@ export class BlockContract extends SmartContract {
       storage: this.storage.getAndRequireEquals(),
       root: this.root.getAndRequireEquals(),
     });
-    const block = new BlockContract(
+    const previousBlockContract = new BlockContract(
       this.previousBlock.getAndRequireEquals(),
       tokenId
     );
     // TODO: add error messages for all assertions
-    const isValidatedOrFinal = block.isValidated
-      .get() // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
-      .or(block.isFinal.get()); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    const previousFlags = Flags.fromField(previousBlockContract.flags.get()); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    const isValidatedOrFinal = previousFlags.isValidated.or(
+      previousFlags.isFinal
+    );
     isValidatedOrFinal.assertEquals(Bool(true));
-    this.isValidated.set(Bool(true));
+    const flags = Flags.fromField(this.flags.getAndRequireEquals());
+    flags.isValidated = Bool(true);
+    this.flags.set(flags.toField());
   }
 
   @method badBlock(tokenId: Field) {
-    // TODO: what is going on if the previous block is not final? Add more Bools and pack them into one Field
-    const block = new BlockContract(
+    const previousBlockContract = new BlockContract(
       this.previousBlock.getAndRequireEquals(),
       tokenId
     );
-    const root = block.root.getAndRequireEquals();
-    this.isValidated.set(Bool(false));
-    this.isFinal.set(Bool(true));
+    const previousFlags = Flags.fromField(previousBlockContract.flags.get()); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    previousFlags.isFinal.assertEquals(Bool(true));
+    const root = previousBlockContract.root.get();
+    const flags = Flags.fromField(this.flags.getAndRequireEquals());
+    flags.isValidated = Bool(false);
+    flags.isInvalid = Bool(true);
+    flags.isFinal = Bool(true);
+    this.flags.set(flags.toField());
     this.root.set(root);
   }
 
   @method proveBlock(data: MapTransition, tokenId: Field) {
-    const isFinal = this.isFinal.getAndRequireEquals();
-    isFinal.assertEquals(Bool(false));
-    const isValidated = this.isValidated.getAndRequireEquals();
-    isValidated.assertEquals(Bool(true));
+    const flags = Flags.fromField(this.flags.getAndRequireEquals());
+    flags.isFinal.assertEquals(Bool(false));
+    flags.isValidated.assertEquals(Bool(true)); // We need to make sure that IPFS data is available and correct
 
-    const block = new BlockContract(
+    const previousBlockContract = new BlockContract(
       this.previousBlock.getAndRequireEquals(),
       tokenId
     );
-    const root = block.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
-    root.assertEquals(data.oldRoot);
+    const oldRoot = previousBlockContract.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    oldRoot.assertEquals(data.oldRoot);
     data.newRoot.assertEquals(this.root.getAndRequireEquals());
-    const isPreviousBlockFinal = block.isFinal.get(); // TODO: change to getAndRequireEquals() after o1js bug fix
-    isPreviousBlockFinal.assertEquals(Bool(true));
+    const previousFlags = Flags.fromField(previousBlockContract.flags.get()); // TODO: change to getAndRequireEquals() after o1js bug fix
+    previousFlags.isFinal.assertEquals(Bool(true));
     const txs: NewBlockTransactions = new NewBlockTransactions({
       value: data.hash,
       count: data.count,
     });
     txs.hash().assertEquals(this.txs.getAndRequireEquals());
-    this.isFinal.set(Bool(true));
+    flags.isProved = Bool(true);
+    flags.isFinal = Bool(true);
+    this.flags.set(flags.toField());
   }
 }
 
@@ -212,13 +255,15 @@ export class DomainNameContract extends TokenContract {
     );
     const lastBlock = this.lastBlock.getAndRequireEquals();
     lastBlock.equals(PublicKey.empty()).assertEquals(Bool(false));
-    const block = new BlockContract(lastBlock, tokenId);
-    const oldRoot = block.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    const previousBlock = new BlockContract(lastBlock, tokenId);
+    const oldRoot = previousBlock.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
     proof.publicInput.decision.data.verifyBlockCreationData({
       verificationKey,
       blockPublicKey: data.address,
       oldRoot,
     });
+    const blockNumber = previousBlock.blockNumber.get().add(Field(1));
+    blockNumber.assertEquals(data.blockNumber);
 
     const account = Account(data.address, tokenId);
     const tokenBalance = account.balance.getAndRequireEquals();
@@ -278,8 +323,16 @@ export class DomainNameContract extends TokenContract {
       { isSome: Bool(true), value: Field(0) },
       { isSome: Bool(true), value: Field(0) },
       { isSome: Bool(true), value: Field(0) },
-      { isSome: Bool(true), value: Bool(true).toField() },
-      { isSome: Bool(true), value: Bool(true).toField() },
+      {
+        isSome: Bool(true),
+        value: new Flags({
+          isValidated: Bool(true),
+          isProved: Bool(true),
+          isFinal: Bool(true),
+          isInvalid: Bool(false),
+        }).toField(),
+      },
+      { isSome: Bool(true), value: Field(0) },
     ];
     this.lastBlock.set(publicKey);
     this.emitEvent(
