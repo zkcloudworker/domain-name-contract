@@ -362,6 +362,7 @@ export class DomainNameContract extends TokenContract {
     const tokenId = this.deriveTokenId();
     const block = new BlockContract(blockAddress, tokenId);
     block.proveBlock(proof.publicInput, tokenId);
+    this.lastProvedBlock.set(blockAddress);
   }
 
   @method badBlock(proof: ValidatorsVotingProof) {

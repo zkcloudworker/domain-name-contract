@@ -2,7 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import { Bool, Field } from "o1js";
 import { Flags } from "../src/contract/domain-contract";
 
-describe("Bits", () => {
+describe("Flags", () => {
   it(`should convert Flags to Field and back`, async () => {
     for (let i = 0; i < 1000; i++) {
       const flags = new Flags({
