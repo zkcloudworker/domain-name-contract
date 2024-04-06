@@ -29,6 +29,12 @@ export class ValidatorDecisionExtraData extends Struct({
   public convertToFields(): Field[] {
     return this.data;
   }
+
+  static empty() {
+    return new ValidatorDecisionExtraData({
+      data: [Field(0), Field(0), Field(0)],
+    });
+  }
   static fromBlockCreationData(params: {
     verificationKey: VerificationKey;
     blockPublicKey: PublicKey;

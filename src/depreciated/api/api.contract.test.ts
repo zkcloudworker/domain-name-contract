@@ -58,7 +58,7 @@ import {
   ReducerState,
 } from "../../contract/domain-contract";
 import { Storage } from "../../contract/storage";
-import { prepareProofData } from "../../rollup/txs-proof";
+import { prepareProofData } from "../../rollup/blocks";
 import { nameContract, JWT } from "../../config";
 import {
   fetchMinaAccount,

@@ -17,8 +17,8 @@ export class DomainDatabase {
     this.data[name] = value;
   }
 
-  remove(name: string) {
-    delete this.data[name];
+  remove(name: Field) {
+    delete this.data[stringFromFields([name])];
   }
 
   getRoot(): Field {

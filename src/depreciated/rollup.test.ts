@@ -17,7 +17,7 @@ import { BlockCalculation, BlockCalculationProof } from "./proof";
 import { MapUpdate, DomainName } from "../rollup/transaction";
 import { Storage } from "../contract/storage";
 import { Metadata } from "../contract/metadata";
-import { calculateProof } from "../rollup/txs-proof";
+import { calculateProof } from "../rollup/blocks";
 import { stringToFields } from "../lib/hash";
 import { DomainNameAction } from "../contract/domain-contract";
 const TREE_MAX_ELEMENTS = (365 * 24 * 60) / 3; // 1 year of 3 minutes blocks

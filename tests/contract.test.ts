@@ -45,6 +45,8 @@ import {
   getNetworkIdHash,
   accountBalanceMina,
   sleep,
+  LocalCloud,
+  LocalStorage,
 } from "zkcloudworker";
 import {
   DomainName,
@@ -57,10 +59,6 @@ import {
 } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
 import { createBlock } from "../src/rollup/blocks";
-import {
-  calculateTransactionsProof,
-  prepareProofData,
-} from "../src/rollup/txs-proof";
 import { MerkleMap } from "../src/lib/merkle-map";
 import { MerkleTree } from "../src/lib/merkle-tree";
 import { DomainDatabase } from "../src/rollup/database";
@@ -69,7 +67,6 @@ import { saveToIPFS, loadFromIPFS } from "../src/contract/storage";
 
 setNumberOfWorkers(8);
 const network: blockchain = "local";
-const pinataJWT = "local";
 const useLocalCloudWorker = true;
 const api = new zkCloudWorkerClient({
   jwt: useLocalCloudWorker ? "local" : JWT,
@@ -80,26 +77,23 @@ const api = new zkCloudWorkerClient({
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const fullValidation = true;
-const ELEMENTS_NUMBER = 3;
+const ELEMENTS_NUMBER = 2;
 const BLOCKS_NUMBER = 3;
-const domainNames: DomainTransactionData[][] = [];
+const domainNames: string[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
 const validators = validatorsPrivateKeys.map((key) => key.toPublicKey());
 const validatorsRoot = tree.getRoot();
-const privateKey = PrivateKey.random();
-const publicKey = privateKey.toPublicKey();
+const contractPrivateKey = PrivateKey.random();
+const contractPublicKey = contractPrivateKey.toPublicKey();
 
-const zkApp = new DomainNameContract(publicKey);
+const zkApp = new DomainNameContract(contractPublicKey);
 let verificationKey: VerificationKey;
 let blockVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
 let tokenId: Field;
-const map = new MerkleMap();
-const proveMap = new MerkleMap();
-let failed = false;
 
+/*
 interface Block {
   address: PublicKey;
   txs: Field;
@@ -114,6 +108,7 @@ interface Block {
   blockNumber: number;
 }
 const blocks: Block[] = [];
+*/
 
 describe("Domain Name Service Contract", () => {
   it(`should prepare blocks data`, async () => {
@@ -121,7 +116,7 @@ describe("Domain Name Service Contract", () => {
     console.time(`prepared data`);
     const nftStorage = new Storage({ hashString: [Field(0), Field(0)] });
     for (let j = 0; j < BLOCKS_NUMBER; j++) {
-      const blockElements: DomainTransactionData[] = [];
+      const blockElements: string[] = [];
       for (let i = 0; i < ELEMENTS_NUMBER; i++) {
         const domainName: DomainName = new DomainName({
           name: stringToFields(makeString(20))[0],
@@ -141,7 +136,9 @@ describe("Domain Name Service Contract", () => {
         });
         const domainTransactionData: DomainTransactionData =
           new DomainTransactionData(domainTransaction);
-        blockElements.push(domainTransactionData);
+        blockElements.push(
+          JSON.stringify(domainTransactionData.toJSON(), null, 2)
+        );
       }
       domainNames.push(blockElements);
     }
@@ -212,7 +209,7 @@ describe("Domain Name Service Contract", () => {
       zkApp.validatorsHash.set(totalHash);
     });
 
-    await tx.sign([deployer, privateKey]).send();
+    await tx.sign([deployer, contractPrivateKey]).send();
 
     const tx2 = await Mina.transaction({ sender }, () => {
       AccountUpdate.fundNewAccount(sender);
@@ -225,16 +222,48 @@ describe("Domain Name Service Contract", () => {
 
   for (let i = 0; i < BLOCKS_NUMBER; i++) {
     const blockNumber = i + 1;
-    if (failed === true) return;
     it(`should create a block`, async () => {
-      if (failed === true) return;
+      // TODO: wait for previous block to be included in the blockchain
+      let args: string = JSON.stringify({
+        contractAddress: contractPublicKey.toBase58(),
+      });
+
+      let sent = false;
+      let apiresult;
+      let attempt = 1;
+      while (sent === false) {
+        apiresult = await api.execute({
+          repo: "nameservice",
+          task: "createBlock",
+          transactions: domainNames[i],
+          args,
+          developer: "@staketab",
+          metadata: `Block ${blockNumber} at ${new Date().toISOString()}`,
+        });
+        if (apiresult.success === true) sent = true;
+        else {
+          console.log(`Error creating job for block ${i}, retrying...`);
+          await sleep(30000 * attempt);
+          attempt++;
+        }
+      }
+
+      expect(apiresult).toBeDefined();
+      if (apiresult === undefined) return;
+      expect(apiresult.success).toBe(true);
+
+      expect(apiresult.jobId).toBeDefined();
+      console.log(`Block ${blockNumber} created, jobId:`, apiresult.jobId);
+      if (apiresult.jobId === undefined) return;
+
+      /*
       console.time(`block ${blockNumber} created`);
       const blockPrivateKey = PrivateKey.random();
       const blockPublicKey = blockPrivateKey.toPublicKey();
       const blockProducerPrivateKey = PrivateKey.random();
       const blockProducerPublicKey = blockProducerPrivateKey.toPublicKey();
 
-      let oldDatabase: DomainDatabase = new DomainDatabase();
+      let database: DomainDatabase = new DomainDatabase();
       let map = new MerkleMap();
       if (i > 0) {
         const lastBlock = zkApp.lastBlock.get();
@@ -249,14 +278,16 @@ describe("Domain Name Service Contract", () => {
         const mapData = await loadFromIPFS(json.map.substring(2));
         const mapJson = JSON.parse(mapData);
         map.tree = MerkleTree.fromCompressedJSON(mapJson.map);
-        oldDatabase = new DomainDatabase(json.database);
+        database = new DomainDatabase(json.database);
       }
 
-      const { root, oldRoot, txs, database } = createBlock(
-        domainNames[i],
+      const { root, oldRoot, txs } = createBlock({
+        elements: domainNames[i].map((tx) =>
+          DomainTransactionData.fromJSON(JSON.parse(tx))
+        ),
         map,
-        oldDatabase
-      );
+        database,
+      });
       const mapJson = {
         map: map.tree.toCompressedJSON(),
       };
@@ -265,7 +296,7 @@ describe("Domain Name Service Contract", () => {
       expect(mapHash).toBeDefined();
       if (mapHash === undefined) throw new Error("mapHash is undefined");
       const json = {
-        txs: domainNames[i].map((tx) => tx.toJSON()),
+        txs: domainNames[i],
         database: database.data,
         map: "i:" + mapHash,
       };
@@ -343,9 +374,11 @@ describe("Domain Name Service Contract", () => {
       await tx.prove();
       await tx.sign([deployer, blockPrivateKey]).send();
       console.timeEnd(`block ${blockNumber} created`);
+      */
     });
 
-    it(`should validate a block`, async () => {
+    /*
+    it(`should validate a block and prepare the proof data`, async () => {
       if (failed === true) return;
       console.time(`block ${blockNumber} validated`);
       const map = new MerkleMap();
@@ -361,7 +394,7 @@ describe("Domain Name Service Contract", () => {
         throw new Error("json.map does not start with 'i:'");
       const mapData = await loadFromIPFS(json.map.substring(2));
       const mapJson = JSON.parse(mapData);
-      let oldDatabase = new DomainDatabase();
+      let database = new DomainDatabase();
       const previousBlockAddress = block.previousBlock.get();
       const previousBlock = new BlockContract(previousBlockAddress, tokenId);
       const previousBlockNumber = Number(
@@ -382,14 +415,14 @@ describe("Domain Name Service Contract", () => {
           previousBlockJson.map.substring(2)
         );
         const previousBlockMapJson = JSON.parse(previousBlockMapData);
-        oldDatabase = new DomainDatabase(previousBlockJson.database);
+        database = new DomainDatabase(previousBlockJson.database);
         oldMap.tree = MerkleTree.fromCompressedJSON(previousBlockMapJson.map);
         const oldRoot = oldMap.getRoot();
         expect(oldRoot.toJSON()).toBe(blocks[i - 1].root.toJSON());
       }
       map.tree = MerkleTree.fromCompressedJSON(mapJson.map);
       const transactionData: DomainTransactionData[] = json.txs.map((tx: any) =>
-        DomainTransactionData.fromJSON(tx)
+        DomainTransactionData.fromJSON(JSON.parse(tx))
       );
       const root = block.root.get();
       expect(root.toJSON()).toBe(blocks[i].root.toJSON());
@@ -402,8 +435,13 @@ describe("Domain Name Service Contract", () => {
       const {
         root: calculatedRoot,
         txs: calculatedTxs,
+        proofData,
+      } = createBlock({
+        elements: transactionData,
+        map: oldMap,
         database,
-      } = createBlock(transactionData, oldMap, oldDatabase);
+        calculateTransactions: true,
+      });
       expect(calculatedRoot.toJSON()).toBe(root.toJSON());
       expect(calculatedTxs.hash().toJSON()).toBe(txs.toJSON());
       const loadedDatabase = new DomainDatabase(json.database);
@@ -443,21 +481,8 @@ describe("Domain Name Service Contract", () => {
       const flags = block.flags.get();
       expect(Flags.fromField(flags).isValidated.toBoolean()).toBe(true);
       console.timeEnd(`block ${blockNumber} validated`);
-    });
+      console.time("prepared proof data for block ${blockNumber}");
 
-    it(`should prove a blocks`, async () => {
-      if (failed === true) return;
-      let proved = await proveBlocks();
-      while (proved) {
-        proved = await proveBlocks();
-      }
-    });
-
-    it(`should prepare proof for a block`, async () => {
-      if (failed === true) return;
-      let proof: MapUpdateProof;
-      const proofData = await prepareProofData(domainNames[i], proveMap, true);
-      const transactions = proofData.transactions;
       console.log("sending proofMap job for block", i);
       let startTime = Date.now();
       let args: string = "";
@@ -469,7 +494,7 @@ describe("Domain Name Service Contract", () => {
         apiresult = await api.recursiveProof({
           repo: "nameservice",
           task: "proofMap",
-          transactions,
+          transactions: proofData,
           args,
           developer: "@staketab",
           metadata: `Block ${blockNumber} at ${new Date().toISOString()}`,
@@ -496,9 +521,31 @@ describe("Domain Name Service Contract", () => {
       if (apiresult.jobId === undefined) return;
       blocks[i].jobId = apiresult.jobId;
       blocks[i].proofStartTime = startTime;
+      console.timeEnd("prepared proof data for block ${blockNumber}");
+    });
+
+    it(`should prove a blocks`, async () => {
+      if (failed === true) return;
+      let proved = await proveBlocks();
+      while (proved) {
+        proved = await proveBlocks();
+      }
+    });
+    */
+    it(`should process tasks`, async () => {
+      let count = 0;
+      for (const task in LocalStorage.tasks) count++;
+      console.log(`Processing ${count} tasks...`);
+      await LocalCloud.processLocalTasks({
+        developer: "@staketab",
+        repo: "nameservice",
+        localWorker: zkcloudworker,
+        chain: "local",
+      });
     });
   }
 
+  /*
   it(`should prove remaining blocks`, async () => {
     if (failed === true) return;
     console.log("Proving remaining blocks...");
@@ -507,11 +554,28 @@ describe("Domain Name Service Contract", () => {
       if (!proved) await sleep(10000);
     }
   });
+  */
+
+  it(`should process tasks`, async () => {
+    let count = 0;
+    for (const task in LocalStorage.tasks) count++;
+    while (count > 0) {
+      console.log(`Processing ${count} tasks...`);
+      await LocalCloud.processLocalTasks({
+        developer: "@staketab",
+        repo: "nameservice",
+        localWorker: zkcloudworker,
+        chain: "local",
+      });
+      await sleep(10000);
+      count = 0;
+      for (const task in LocalStorage.tasks) count++;
+    }
+  });
 
   it(`should change validators`, async () => {
-    if (failed === true) return;
     const decision = new ValidatorsDecision({
-      contract: publicKey,
+      contract: contractPublicKey,
       chainId: networkIdHash,
       root: validatorsRoot,
       decision: ValidatorDecisionType.setValidators,
@@ -541,6 +605,7 @@ describe("Domain Name Service Contract", () => {
   });
 });
 
+/*
 async function proveBlocks(): Promise<boolean> {
   // find the first block that is not proved
   let blockIndex = 0;
@@ -554,12 +619,6 @@ async function proveBlocks(): Promise<boolean> {
   const blockNumber = blockIndex + 1;
   const jobId = blocks[blockIndex].jobId;
   if (jobId !== undefined) {
-    /*
-      console.log(
-        `Checking if proof for the block ${j} is ready, jobId:`,
-        blocks[j].jobId
-      );
-      */
     let attempt = 1;
     let received = false;
     let result;
@@ -626,3 +685,5 @@ async function proveBlocks(): Promise<boolean> {
   }
   return false;
 }
+
+*/

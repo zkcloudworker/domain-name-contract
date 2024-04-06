@@ -25,7 +25,7 @@ import { stringToFields } from "../lib/hash";
 import { MapUpdateProof, MapUpdate, DomainName } from "../rollup/transaction";
 import { TREE_HEIGHT, addBlock, BlockElement } from "../rollup/blocks";
 import { BlockCalculation } from "./proof";
-import { calculateProof } from "../rollup/txs-proof";
+import { calculateProof } from "../rollup/blocks";
 import { Storage } from "../contract/storage";
 import { Metadata } from "../contract/metadata";
 import { emptyActionsHash, calculateActionsHash } from "../lib/hash";
