@@ -164,10 +164,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
   public async execute(transactions: string[]): Promise<string | undefined> {
     switch (this.cloud.task) {
-      case "createBlock":
-        return await this.createRollupBlock(transactions);
+      case "createTxTask":
+        return await this.createTxTask();
       default:
-        console.error("Unknown task", this.cloud.task);
+        console.error("Unknown task in execute:", this.cloud.task);
         return undefined;
     }
   }
@@ -180,14 +180,60 @@ export class DomainNameServiceWorker extends zkCloudWorker {
           return await this.validateRollupBlock();
         case "proveBlock":
           return await this.proveRollupBlock();
+        case "txTask":
+          return await this.txTask();
+
         default:
-          console.error("Unknown task", this.cloud.task);
+          console.error("Unknown task in task:", this.cloud.task);
           return undefined;
       }
     } catch (error) {
       console.error("Error in task", error);
       return undefined;
     }
+  }
+
+  private async txTask(): Promise<string | undefined> {
+    const transactions = await this.cloud.getTransactions();
+    if (transactions.length !== 0) {
+      // sort by timeReceived, ascending
+      transactions.sort((a, b) => a.timeReceived - b.timeReceived);
+      console.log(
+        `Executing txTask with ${
+          transactions.length
+        } transactions, first tx created at ${new Date(
+          transactions[0].timeReceived
+        ).toLocaleString()}...`
+      );
+      await this.createRollupBlock(transactions.map((tx) => tx.transaction));
+      for (const tx of transactions) {
+        await this.cloud.deleteTransaction(tx.txId);
+      }
+    }
+    return "txTask executed";
+  }
+
+  private async createTxTask(): Promise<string | undefined> {
+    // TODO: add fetchAccount and check that block validation tx is confirmed
+    if (this.cloud.args === undefined)
+      throw new Error("this.cloud.args is undefined");
+    const args = JSON.parse(this.cloud.args);
+    console.log(`Adding txTask...`);
+    if (args.contractAddress === undefined)
+      throw new Error("args.contractAddress is undefined");
+    await this.cloud.addTask({
+      args: JSON.stringify(
+        {
+          contractAddress: args.contractAddress,
+        },
+        null,
+        2
+      ),
+      task: "txTask",
+      metadata: this.cloud.metadata,
+      userId: this.cloud.userId,
+    });
+    return "txTask added";
   }
 
   private async proveRollupBlock(): Promise<string | undefined> {
