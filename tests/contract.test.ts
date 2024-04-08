@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@jest/globals";
-import assert from "node:assert/strict";
 import {
   Field,
   PrivateKey,
@@ -37,7 +36,7 @@ import {
   accountBalanceMina,
   sleep,
   LocalCloud,
-  LocalStorage,
+  Memory,
 } from "zkcloudworker";
 import {
   DomainName,
@@ -46,7 +45,6 @@ import {
   DomainTransactionData,
   DomainTransactionEnum,
   MapUpdate,
-  MapUpdateProof,
 } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
 import { zkcloudworker } from "../src/worker";
@@ -63,8 +61,8 @@ const api = new zkCloudWorkerClient({
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const ELEMENTS_NUMBER = 2;
-const BLOCKS_NUMBER = 3;
+const ELEMENTS_NUMBER = 3;
+const BLOCKS_NUMBER = 5;
 const domainNames: string[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -187,6 +185,7 @@ describe("Domain Name Service Contract", () => {
     await tx2.prove();
     await tx2.sign([deployer, nameContract.firstBlockPrivateKey!]).send();
     tokenId = zkApp.deriveTokenId();
+    Memory.info("deployed");
   });
 
   it(`should add task to process transactions`, async () => {
@@ -227,7 +226,7 @@ describe("Domain Name Service Contract", () => {
   for (let i = 0; i < BLOCKS_NUMBER; i++) {
     const blockNumber = i + 1;
     it(`should create a block`, async () => {
-      console.log(`Sending txs to the block ${blockNumber}...`);
+      console.time(`Txs to the block ${blockNumber} sent`);
       for (let j = 0; j < ELEMENTS_NUMBER; j++) {
         let sent = false;
         let apiresult;
@@ -256,11 +255,10 @@ describe("Domain Name Service Contract", () => {
           throw new Error("Job ID is undefined");
         await sleep(2000);
       }
-      console.log(`Txs to the block ${blockNumber} sent`);
+      console.timeEnd(`Txs to the block ${blockNumber} sent`);
     });
 
     it(`should process tasks`, async () => {
-      console.log(`Processing tasks...`);
       while (
         (await LocalCloud.processLocalTasks({
           developer: "@staketab",
@@ -272,6 +270,7 @@ describe("Domain Name Service Contract", () => {
         await sleep(1000);
       }
     });
+    Memory.info(`block ${blockNumber} processed`);
   }
 
   it(`should process remaining tasks`, async () => {
@@ -289,6 +288,7 @@ describe("Domain Name Service Contract", () => {
   });
 
   it(`should change validators`, async () => {
+    console.log(`Changing validators...`);
     const decision = new ValidatorsDecision({
       contract: contractPublicKey,
       chainId: networkIdHash,

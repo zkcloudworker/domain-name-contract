@@ -174,6 +174,9 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
   public async task(): Promise<string | undefined> {
     if (this.cloud.task === undefined) throw new Error("task is undefined");
+    console.log(
+      `Executing task ${this.cloud.task} with taskId ${this.cloud.taskId}`
+    );
     try {
       switch (this.cloud.task) {
         case "validateBlock":
@@ -273,8 +276,9 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     await tx.prove();
     const txSent = await tx.sign([deployer]).send();
     if (txSent.status !== "pending")
-      throw new Error("Error sending block creation transaction");
+      throw new Error("Error sending block proving transaction");
     console.log("Deleting proveBlock task", this.cloud.taskId);
+    console.log(`Block ${args.blockNumber} is proved`);
     await this.cloud.deleteTask(this.cloud.taskId);
     return txSent.hash;
   }
@@ -467,6 +471,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         userId: this.cloud.userId,
       });
     }
+    console.log(`Block ${args.blockNumber} is validated`);
     console.timeEnd(`block validated`);
     return txSent.hash;
   }
