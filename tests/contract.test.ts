@@ -3,16 +3,11 @@ import assert from "node:assert/strict";
 import {
   Field,
   PrivateKey,
-  PublicKey,
-  Signature,
   setNumberOfWorkers,
   Mina,
   AccountUpdate,
   VerificationKey,
   UInt64,
-  JsonProof,
-  verify,
-  Bool,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -25,9 +20,6 @@ import {
 import {
   DomainNameContract,
   BlockContract,
-  BlockData,
-  NewBlockTransactions,
-  Flags,
 } from "../src/contract/domain-contract";
 import { stringToFields } from "../src/lib/hash";
 import {
@@ -38,7 +30,6 @@ import { Storage } from "../src/contract/storage";
 import { nameContract, JWT } from "../src/config";
 import {
   zkCloudWorkerClient,
-  formatTime,
   makeString,
   initBlockchain,
   blockchain,
@@ -58,12 +49,7 @@ import {
   MapUpdateProof,
 } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
-import { createBlock } from "../src/rollup/blocks";
-import { MerkleMap } from "../src/lib/merkle-map";
-import { MerkleTree } from "../src/lib/merkle-tree";
-import { DomainDatabase } from "../src/rollup/database";
 import { zkcloudworker } from "../src/worker";
-import { saveToIPFS, loadFromIPFS } from "../src/contract/storage";
 
 setNumberOfWorkers(8);
 const network: blockchain = "local";
@@ -92,23 +78,6 @@ let verificationKey: VerificationKey;
 let blockVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
 let tokenId: Field;
-
-/*
-interface Block {
-  address: PublicKey;
-  txs: Field;
-  root: Field;
-  count: Field;
-  storage: Storage;
-  //json: string;
-  //mapJson: string;
-  jobId?: string;
-  proofStartTime?: number;
-  isProved: boolean;
-  blockNumber: number;
-}
-const blocks: Block[] = [];
-*/
 
 describe("Domain Name Service Contract", () => {
   it(`should prepare blocks data`, async () => {
@@ -220,356 +189,102 @@ describe("Domain Name Service Contract", () => {
     tokenId = zkApp.deriveTokenId();
   });
 
+  it(`should add task to process transactions`, async () => {
+    console.log(`Adding task to process transactions...`);
+    let args: string = JSON.stringify({
+      contractAddress: contractPublicKey.toBase58(),
+    });
+
+    let sent = false;
+    let apiresult;
+    let attempt = 1;
+    while (sent === false) {
+      apiresult = await api.execute({
+        repo: "nameservice",
+        task: "createTxTask",
+        transactions: [],
+        args,
+        developer: "@staketab",
+        metadata: `txTask`,
+      });
+      if (apiresult.success === true) sent = true;
+      else {
+        console.log(`Error creating job for txTask, retrying...`);
+        await sleep(30000 * attempt);
+        attempt++;
+      }
+    }
+
+    expect(apiresult).toBeDefined();
+    if (apiresult === undefined) return;
+    expect(apiresult.success).toBe(true);
+
+    expect(apiresult.jobId).toBeDefined();
+    console.log(`txTask created, jobId:`, apiresult.jobId);
+    if (apiresult.jobId === undefined) return;
+  });
+
   for (let i = 0; i < BLOCKS_NUMBER; i++) {
     const blockNumber = i + 1;
     it(`should create a block`, async () => {
-      // TODO: wait for previous block to be included in the blockchain
-      let args: string = JSON.stringify({
-        contractAddress: contractPublicKey.toBase58(),
-      });
-
-      let sent = false;
-      let apiresult;
-      let attempt = 1;
-      while (sent === false) {
-        apiresult = await api.execute({
-          repo: "nameservice",
-          task: "createBlock",
-          transactions: domainNames[i],
-          args,
-          developer: "@staketab",
-          metadata: `Block ${blockNumber} at ${new Date().toISOString()}`,
-        });
-        if (apiresult.success === true) sent = true;
-        else {
-          console.log(`Error creating job for block ${i}, retrying...`);
-          await sleep(30000 * attempt);
-          attempt++;
+      console.log(`Sending txs to the block ${blockNumber}...`);
+      for (let j = 0; j < ELEMENTS_NUMBER; j++) {
+        let sent = false;
+        let apiresult;
+        let attempt = 1;
+        while (sent === false) {
+          apiresult = await api.sendTransaction({
+            repo: "nameservice",
+            transaction: domainNames[i][j],
+            developer: "@staketab",
+          });
+          if (apiresult.success === true) sent = true;
+          else {
+            console.log(`Error sending tx ${j} to block ${i}, retrying...`);
+            await sleep(30000 * attempt);
+            attempt++;
+          }
         }
+
+        expect(apiresult).toBeDefined();
+        if (apiresult === undefined) return;
+        expect(apiresult.success).toBe(true);
+
+        expect(apiresult.jobId).toBeDefined();
+        console.log(`Tx ${j + 1} sent, jobId:`, apiresult.jobId);
+        if (apiresult.jobId === undefined)
+          throw new Error("Job ID is undefined");
+        await sleep(2000);
       }
-
-      expect(apiresult).toBeDefined();
-      if (apiresult === undefined) return;
-      expect(apiresult.success).toBe(true);
-
-      expect(apiresult.jobId).toBeDefined();
-      console.log(`Block ${blockNumber} created, jobId:`, apiresult.jobId);
-      if (apiresult.jobId === undefined) return;
-
-      /*
-      console.time(`block ${blockNumber} created`);
-      const blockPrivateKey = PrivateKey.random();
-      const blockPublicKey = blockPrivateKey.toPublicKey();
-      const blockProducerPrivateKey = PrivateKey.random();
-      const blockProducerPublicKey = blockProducerPrivateKey.toPublicKey();
-
-      let database: DomainDatabase = new DomainDatabase();
-      let map = new MerkleMap();
-      if (i > 0) {
-        const lastBlock = zkApp.lastBlock.get();
-        const block = new BlockContract(lastBlock, tokenId);
-        const storage = block.storage.get();
-        const hash = storage.toIpfsHash();
-        const data = await loadFromIPFS(hash);
-        const json = JSON.parse(data);
-        if (json.map === undefined) throw new Error("json.map is undefined");
-        if (json.map.startsWith("i:") === false)
-          throw new Error("json.map does not start with 'i:'");
-        const mapData = await loadFromIPFS(json.map.substring(2));
-        const mapJson = JSON.parse(mapData);
-        map.tree = MerkleTree.fromCompressedJSON(mapJson.map);
-        database = new DomainDatabase(json.database);
-      }
-
-      const { root, oldRoot, txs } = createBlock({
-        elements: domainNames[i].map((tx) =>
-          DomainTransactionData.fromJSON(JSON.parse(tx))
-        ),
-        map,
-        database,
-      });
-      const mapJson = {
-        map: map.tree.toCompressedJSON(),
-      };
-      const strMapJson = JSON.stringify(mapJson, null, 2);
-      const mapHash = await saveToIPFS(strMapJson, pinataJWT);
-      expect(mapHash).toBeDefined();
-      if (mapHash === undefined) throw new Error("mapHash is undefined");
-      const json = {
-        txs: domainNames[i],
-        database: database.data,
-        map: "i:" + mapHash,
-      };
-      const strJson = JSON.stringify(json, null, 2);
-      const hash = await saveToIPFS(strJson, pinataJWT);
-      expect(hash).toBeDefined();
-      if (hash === undefined) throw new Error("hash is undefined");
-
-      if (fullValidation) {
-        expect(root.toJSON()).toBe(database.getRoot().toJSON());
-        const restoredMap = new MerkleMap();
-        restoredMap.tree = MerkleTree.fromCompressedJSON(mapJson.map);
-        expect(restoredMap.getRoot().toJSON()).toBe(root.toJSON());
-      }
-
-      console.log(
-        `Block ${blockNumber} JSON size: ${strJson.length.toLocaleString()}, map JSON size: ${strMapJson.length.toLocaleString()}`
-      );
-
-      const blockStorage = Storage.fromIpfsHash(hash);
-
-      blocks.push({
-        address: blockPublicKey,
-        txs: txs.hash(),
-        count: txs.count,
-        root,
-        storage: blockStorage,
-        isProved: false,
-        blockNumber,
-      });
-
-      const decision = new ValidatorsDecision({
-        contract: publicKey,
-        chainId: networkIdHash,
-        root: validatorsRoot,
-        decision: ValidatorDecisionType.createBlock,
-        address: blockProducerPublicKey,
-        data: ValidatorDecisionExtraData.fromBlockCreationData({
-          verificationKey: blockVerificationKey,
-          blockPublicKey,
-          oldRoot,
-        }),
-        expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
-      });
-      const proof: ValidatorsVotingProof = await calculateValidatorsProof(
-        decision,
-        verificationKey,
-        false
-      );
-      expect(Number(proof.publicInput.count.toBigInt())).toBe(
-        validators.length
-      );
-      expect(proof.publicInput.hash.toJSON()).toBe(totalHash.toJSON());
-      const blockData: BlockData = new BlockData({
-        address: blockPublicKey,
-        root,
-        storage: blockStorage,
-        txs,
-        isFinal: Bool(false),
-        isProved: Bool(false),
-        isInvalid: Bool(false),
-        isValidated: Bool(false),
-        blockNumber: Field(blockNumber),
-      });
-      const signature = Signature.create(
-        blockProducerPrivateKey,
-        BlockData.toFields(blockData)
-      );
-
-      const tx = await Mina.transaction({ sender }, () => {
-        AccountUpdate.fundNewAccount(sender);
-        zkApp.block(proof, signature, blockData, blockVerificationKey);
-      });
-
-      await tx.prove();
-      await tx.sign([deployer, blockPrivateKey]).send();
-      console.timeEnd(`block ${blockNumber} created`);
-      */
+      console.log(`Txs to the block ${blockNumber} sent`);
     });
 
-    /*
-    it(`should validate a block and prepare the proof data`, async () => {
-      if (failed === true) return;
-      console.time(`block ${blockNumber} validated`);
-      const map = new MerkleMap();
-      const oldMap = new MerkleMap();
-      const blockAddress = blocks[i].address;
-      const block = new BlockContract(blockAddress, tokenId);
-      const blockStorage = block.storage.get();
-      const hash = blockStorage.toIpfsHash();
-      const data = await loadFromIPFS(hash);
-      const json = JSON.parse(data);
-      if (json.map === undefined) throw new Error("json.map is undefined");
-      if (json.map.startsWith("i:") === false)
-        throw new Error("json.map does not start with 'i:'");
-      const mapData = await loadFromIPFS(json.map.substring(2));
-      const mapJson = JSON.parse(mapData);
-      let database = new DomainDatabase();
-      const previousBlockAddress = block.previousBlock.get();
-      const previousBlock = new BlockContract(previousBlockAddress, tokenId);
-      const previousBlockNumber = Number(
-        previousBlock.blockNumber.get().toBigInt()
-      );
-      //console.log("previousBlockNumber", previousBlockNumber);
-      if (previousBlockNumber > 0) {
-        const previousBlockStorage = previousBlock.storage.get();
-        const previousBlockHash = previousBlockStorage.toIpfsHash();
-        const previousBlockData = await loadFromIPFS(previousBlockHash);
-        const previousBlockJson = JSON.parse(previousBlockData);
-        //console.log("previousBlockJson map:", previousBlockJson.map);
-        if (previousBlockJson.map === undefined)
-          throw new Error("previousBlockJson.map is undefined");
-        if (previousBlockJson.map.startsWith("i:") === false)
-          throw new Error("previousBlockJson.map does not start with 'i:'");
-        const previousBlockMapData = await loadFromIPFS(
-          previousBlockJson.map.substring(2)
-        );
-        const previousBlockMapJson = JSON.parse(previousBlockMapData);
-        database = new DomainDatabase(previousBlockJson.database);
-        oldMap.tree = MerkleTree.fromCompressedJSON(previousBlockMapJson.map);
-        const oldRoot = oldMap.getRoot();
-        expect(oldRoot.toJSON()).toBe(blocks[i - 1].root.toJSON());
-      }
-      map.tree = MerkleTree.fromCompressedJSON(mapJson.map);
-      const transactionData: DomainTransactionData[] = json.txs.map((tx: any) =>
-        DomainTransactionData.fromJSON(JSON.parse(tx))
-      );
-      const root = block.root.get();
-      expect(root.toJSON()).toBe(blocks[i].root.toJSON());
-      expect(root.toJSON()).toBe(map.getRoot().toJSON());
-      const storage = block.storage.get();
-      Storage.assertEquals(storage, blocks[i].storage);
-      const txs = block.txs.get();
-      expect(txs.toJSON()).toBe(blocks[i].txs.toJSON());
-
-      const {
-        root: calculatedRoot,
-        txs: calculatedTxs,
-        proofData,
-      } = createBlock({
-        elements: transactionData,
-        map: oldMap,
-        database,
-        calculateTransactions: true,
-      });
-      expect(calculatedRoot.toJSON()).toBe(root.toJSON());
-      expect(calculatedTxs.hash().toJSON()).toBe(txs.toJSON());
-      const loadedDatabase = new DomainDatabase(json.database);
-      assert.deepStrictEqual(database.data, loadedDatabase.data);
-      expect(root.toJSON()).toBe(database.getRoot().toJSON());
-      expect(root.toJSON()).toBe(loadedDatabase.getRoot().toJSON());
-
-      const decision = new ValidatorsDecision({
-        contract: publicKey,
-        chainId: networkIdHash,
-        root: validatorsRoot,
-        decision: ValidatorDecisionType.validate,
-        address: blocks[i].address,
-        data: ValidatorDecisionExtraData.fromBlockValidationData({
-          storage,
-          txs,
-          root,
-        }),
-        expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
-      });
-      const proof: ValidatorsVotingProof = await calculateValidatorsProof(
-        decision,
-        verificationKey,
-        false
-      );
-      expect(Number(proof.publicInput.count.toBigInt())).toBe(
-        validators.length
-      );
-      expect(proof.publicInput.hash.toJSON()).toBe(totalHash.toJSON());
-
-      const tx = await Mina.transaction({ sender }, () => {
-        zkApp.validateBlock(proof);
-      });
-
-      await tx.prove();
-      await tx.sign([deployer]).send();
-      const flags = block.flags.get();
-      expect(Flags.fromField(flags).isValidated.toBoolean()).toBe(true);
-      console.timeEnd(`block ${blockNumber} validated`);
-      console.time("prepared proof data for block ${blockNumber}");
-
-      console.log("sending proofMap job for block", i);
-      let startTime = Date.now();
-      let args: string = "";
-
-      let sent = false;
-      let apiresult;
-      let attempt = 1;
-      while (sent === false) {
-        apiresult = await api.recursiveProof({
-          repo: "nameservice",
-          task: "proofMap",
-          transactions: proofData,
-          args,
-          developer: "@staketab",
-          metadata: `Block ${blockNumber} at ${new Date().toISOString()}`,
-        });
-        if (apiresult.success === true) sent = true;
-        else {
-          console.log(`Error creating job for block ${i}, retrying...`);
-          await sleep(30000 * attempt);
-          attempt++;
-        }
-      }
-
-      expect(apiresult).toBeDefined();
-      if (apiresult === undefined) return;
-      expect(apiresult.success).toBe(true);
-
-      expect(apiresult.jobId).toBeDefined();
-      console.log(
-        "proofMap job created for block",
-        blockNumber,
-        ", jobId:",
-        apiresult.jobId
-      );
-      if (apiresult.jobId === undefined) return;
-      blocks[i].jobId = apiresult.jobId;
-      blocks[i].proofStartTime = startTime;
-      console.timeEnd("prepared proof data for block ${blockNumber}");
-    });
-
-    it(`should prove a blocks`, async () => {
-      if (failed === true) return;
-      let proved = await proveBlocks();
-      while (proved) {
-        proved = await proveBlocks();
-      }
-    });
-    */
     it(`should process tasks`, async () => {
-      let count = 0;
-      for (const task in LocalStorage.tasks) count++;
-      console.log(`Processing ${count} tasks...`);
-      await LocalCloud.processLocalTasks({
-        developer: "@staketab",
-        repo: "nameservice",
-        localWorker: zkcloudworker,
-        chain: "local",
-      });
+      console.log(`Processing tasks...`);
+      while (
+        (await LocalCloud.processLocalTasks({
+          developer: "@staketab",
+          repo: "nameservice",
+          localWorker: zkcloudworker,
+          chain: "local",
+        })) > 1
+      ) {
+        await sleep(1000);
+      }
     });
   }
 
-  /*
-  it(`should prove remaining blocks`, async () => {
-    if (failed === true) return;
-    console.log("Proving remaining blocks...");
-    while (blocks[blocks.length - 1].isProved === false) {
-      const proved = await proveBlocks();
-      if (!proved) await sleep(10000);
-    }
-  });
-  */
-
-  it(`should process tasks`, async () => {
-    let count = 0;
-    for (const task in LocalStorage.tasks) count++;
-    while (count > 0) {
-      console.log(`Processing ${count} tasks...`);
-      await LocalCloud.processLocalTasks({
+  it(`should process remaining tasks`, async () => {
+    console.log(`Processing remaining tasks...`);
+    while (
+      (await LocalCloud.processLocalTasks({
         developer: "@staketab",
         repo: "nameservice",
         localWorker: zkcloudworker,
         chain: "local",
-      });
-      await sleep(10000);
-      count = 0;
-      for (const task in LocalStorage.tasks) count++;
+      })) > 1
+    ) {
+      await sleep(1000);
     }
   });
 
@@ -604,86 +319,3 @@ describe("Domain Name Service Contract", () => {
     expect(validatorsHash.toJSON()).toBe(Field(1).toJSON());
   });
 });
-
-/*
-async function proveBlocks(): Promise<boolean> {
-  // find the first block that is not proved
-  let blockIndex = 0;
-  let found = false;
-  while (found === false && blockIndex < blocks.length) {
-    if (blocks[blockIndex].isProved === false) {
-      found = true;
-    } else blockIndex++;
-  }
-  if (!found) return false;
-  const blockNumber = blockIndex + 1;
-  const jobId = blocks[blockIndex].jobId;
-  if (jobId !== undefined) {
-    let attempt = 1;
-    let received = false;
-    let result;
-    await sleep(1000);
-    while (received === false) {
-      result = await api.jobResult({ jobId });
-      if (result.success === false) {
-        console.log(
-          `Error getting job result for block ${blockNumber}, attempt ${
-            attempt + 1
-          }...`
-        );
-        await sleep(10000 * attempt);
-        attempt++;
-      } else received = true;
-      if (attempt > 5) return false;
-    }
-    if (result?.result.jobStatus === "failed") {
-      console.error(`job failed for block ${blockIndex}: ${result?.result}`);
-      failed = true;
-      return false;
-    }
-    if (result?.result?.result !== undefined) {
-      //console.log(`job result for block ${j}`, result.result.result);
-      console.time(`block ${blockNumber} proved`);
-      let endTime = Date.now();
-      const startTime = blocks[blockIndex].proofStartTime ?? 0;
-      console.log(
-        `Time spent to calculate the proof for block ${blockNumber}: ${formatTime(
-          endTime - startTime
-        )} (${endTime - startTime} ms)`
-      );
-      const proof: MapUpdateProof = MapUpdateProof.fromJSON(
-        JSON.parse(result.result.result) as JsonProof
-      );
-
-      expect(proof).toBeDefined();
-      if (proof === undefined) return false;
-      const ok = await verify(proof.toJSON(), mapVerificationKey);
-      if (!ok) console.error("Proof verification failed");
-      expect(ok).toBe(true);
-      const tx = await Mina.transaction({ sender }, () => {
-        zkApp.proveBlock(proof, blocks[blockIndex].address);
-      });
-
-      await tx.prove();
-      await tx.sign([deployer]).send();
-      blocks[blockIndex].isProved = true;
-      const block = new BlockContract(blocks[blockIndex].address, tokenId);
-      const flags = block.flags.get();
-      expect(Flags.fromField(flags).isProved.toBoolean()).toBe(true);
-      console.timeEnd(`block ${blockNumber} proved`);
-      return true;
-    } else {
-      if (Date.now() - result?.result.timeStarted > 5 * 60 * 1000)
-        console.log(
-          `No result for block ${blockNumber}: ${result?.result.jobStatus} ${(
-            (Date.now() - result?.result.timeStarted) /
-            1000
-          ).toFixed(0)} seconds ago`
-        );
-      return false;
-    }
-  }
-  return false;
-}
-
-*/
