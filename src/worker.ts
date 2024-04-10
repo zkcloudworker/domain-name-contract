@@ -270,8 +270,8 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
     const tx = await Mina.transaction(
       { sender, fee: await fee(), memo: "zkCloudWorker" },
-      () => {
-        zkApp.proveBlock(proof, blockAddress);
+      async () => {
+        await zkApp.proveBlock(proof, blockAddress);
       }
     );
 
@@ -343,12 +343,12 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         );
         const previousBlockMapJson = JSON.parse(previousBlockMapData);
         database = new DomainDatabase(previousBlockJson.database);
-        oldMap.tree = MerkleTree.fromCompressedJSON(previousBlockMapJson.map);
+        oldMap.tree = MerkleTree.fromJSON(previousBlockMapJson.map);
         const oldRoot = oldMap.getRoot();
         if (previousBlockRoot.toJSON() !== oldRoot.toJSON())
           throw new Error("Invalid previous block root");
       }
-      map.tree = MerkleTree.fromCompressedJSON(mapJson.map);
+      map.tree = MerkleTree.fromJSON(mapJson.map);
       const transactionData: DomainTransactionData[] = json.txs.map((tx: any) =>
         DomainTransactionData.fromJSON(JSON.parse(tx))
       );
@@ -437,8 +437,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
     const tx = await Mina.transaction(
       { sender, fee: await fee(), memo: "zkCloudWorker" },
-      () => {
-        validated ? zkApp.validateBlock(proof) : zkApp.badBlock(proof);
+      async () => {
+        validated
+          ? await zkApp.validateBlock(proof)
+          : await zkApp.badBlock(proof);
       }
     );
 
@@ -506,7 +508,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         throw new Error("json.map does not start with 'i:'");
       const mapData = await loadFromIPFS(json.map.substring(2));
       const mapJson = JSON.parse(mapData);
-      map.tree = MerkleTree.fromCompressedJSON(mapJson.map);
+      map.tree = MerkleTree.fromJSON(mapJson.map);
       database = new DomainDatabase(json.database);
     }
 
@@ -527,11 +529,11 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     });
 
     const mapJson = {
-      map: map.tree.toCompressedJSON(),
+      map: map.tree.toJSON(),
     };
     if (fullValidation) {
       const restoredMap = new MerkleMap();
-      restoredMap.tree = MerkleTree.fromCompressedJSON(mapJson.map);
+      restoredMap.tree = MerkleTree.fromJSON(mapJson.map);
       if (restoredMap.getRoot().toJSON() !== root.toJSON())
         throw new Error("Invalid root");
     }
@@ -635,9 +637,9 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
     const tx = await Mina.transaction(
       { sender, fee: await fee(), memo: "zkCloudWorker" },
-      () => {
+      async () => {
         AccountUpdate.fundNewAccount(sender);
-        zkApp.block(proof, signature, blockData, blockVerificationKey);
+        await zkApp.block(proof, signature, blockData, blockVerificationKey);
       }
     );
 

@@ -12,6 +12,19 @@ describe("Map", () => {
   for (let i = 0; i < ELEMENTS_NUMBER; i++) {
     elements.push({ key: Field.random(), value: Field.random() });
   }
+
+  it(`should get witness`, async () => {
+    const map = new MerkleMap();
+    const root = map.getRoot();
+    console.log("root", root.toJSON());
+    const witness = map.getWitness(Field(1));
+    const [rootBefore, keyBefore] = witness.computeRootAndKey(Field(0));
+    console.log("rootBefore", rootBefore.toJSON());
+    console.log("keyBefore", keyBefore.toJSON());
+    expect(rootBefore.toJSON()).toEqual(root.toJSON());
+    map.set(Field(1), Field(2));
+  });
+
   it(`should export tree`, async () => {
     const tree = new MerkleTree(20);
     const maxLeafs = tree.leafCount;
@@ -27,25 +40,7 @@ describe("Map", () => {
     expect(root1.toJSON()).toEqual(root2.toJSON());
   });
 
-  it.skip(`should export map`, async () => {
-    const map: MerkleMap = new MerkleMap();
-    console.time("created");
-    for (let i = 0; i < ELEMENTS_NUMBER; i++) {
-      map.set(elements[i].key, elements[i].value);
-    }
-    console.timeEnd("created");
-    const root = map.getRoot();
-    const str = JSON.stringify(map.tree.toJSON(), null, 2);
-    console.log("str", str.length);
-    const map2: MerkleMap = new MerkleMap();
-    console.time("fromJSON");
-    map2.tree = MerkleTree.fromJSON(JSON.parse(str));
-    console.timeEnd("fromJSON");
-    const root2 = map2.getRoot();
-    expect(root.toJSON()).toEqual(root2.toJSON());
-  });
-
-  it(`should export map in compressed format`, async () => {
+  it(`should export map`, async () => {
     const map: MerkleMap = new MerkleMap();
     console.time("created");
     for (let i = 0; i < ELEMENTS_NUMBER; i++) {
@@ -54,7 +49,7 @@ describe("Map", () => {
     console.timeEnd("created");
     const root = map.getRoot();
     console.time("toJSON");
-    const str = JSON.stringify(map.tree.toCompressedJSON(), null, 2);
+    const str = JSON.stringify(map.tree.toJSON(), null, 2);
     console.timeEnd("toJSON");
     console.log("JSON size:", str.length.toLocaleString());
     console.time("saveZipFile");
@@ -72,7 +67,7 @@ describe("Map", () => {
     if (str2 === undefined) throw new Error("str2 is undefined");
     console.timeEnd("loadZipFile");
     console.time("fromJSON");
-    map2.tree = MerkleTree.fromCompressedJSON(JSON.parse(str2));
+    map2.tree = MerkleTree.fromJSON(JSON.parse(str2));
     console.timeEnd("fromJSON");
     const root2 = map2.getRoot();
     expect(root.toJSON()).toEqual(root2.toJSON());

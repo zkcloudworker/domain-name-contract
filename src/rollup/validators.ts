@@ -211,7 +211,7 @@ export const ValidatorsVoting = ZkProgram({
         Signature,
       ],
 
-      method(
+      async method(
         state: ValidatorsDecisionState,
         decision: ValidatorsDecision,
         validatorAddress: PublicKey,
@@ -231,7 +231,7 @@ export const ValidatorsVoting = ZkProgram({
     abstain: {
       privateInputs: [ValidatorsDecision, PublicKey, ValidatorWitness],
 
-      method(
+      async method(
         state: ValidatorsDecisionState,
         decision: ValidatorsDecision,
         validatorAddress: PublicKey,
@@ -249,7 +249,7 @@ export const ValidatorsVoting = ZkProgram({
     merge: {
       privateInputs: [SelfProof, SelfProof],
 
-      method(
+      async method(
         state: ValidatorsDecisionState,
         proof1: SelfProof<ValidatorsDecisionState, void>,
         proof2: SelfProof<ValidatorsDecisionState, void>

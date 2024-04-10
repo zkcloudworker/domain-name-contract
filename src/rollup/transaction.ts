@@ -4,7 +4,6 @@ import {
   SelfProof,
   ZkProgram,
   Struct,
-  MerkleMapWitness,
   Poseidon,
   PublicKey,
   UInt64,
@@ -15,6 +14,7 @@ import {
 import { Metadata } from "../contract/metadata";
 import { Storage } from "../contract/storage";
 import { serializeFields, deserializeFields } from "../lib/fields";
+import { MerkleMapWitness } from "../lib/merkle-map";
 
 export class DomainNameValue extends Struct({
   address: PublicKey,
@@ -164,14 +164,15 @@ class MapTransition extends Struct({
 
     const [rootBefore, keyBefore] = update.witness.computeRootAndKey(Field(0));
     update.oldRoot.assertEquals(rootBefore);
-    key.assertEquals(keyBefore);
+    // TODO: uncomment after https://github.com/o1-labs/o1js/issues/1552 is resolved
+    //key.assertEquals(keyBefore);
 
     const [rootAfter, keyAfter] = update.witness.computeRootAndKey(value);
     update.newRoot.assertEquals(rootAfter);
-    key.assertEquals(keyAfter);
+    // TODO: uncomment after https://github.com/o1-labs/o1js/issues/1552 is resolved
+    //key.assertEquals(keyAfter);
 
     const hash = update.tx.hash();
-    //Provable.log("MapTransition add hash", hash);
 
     return new MapTransition({
       oldRoot: update.oldRoot,
@@ -312,12 +313,13 @@ class MapTransition extends Struct({
 const MapUpdate = ZkProgram({
   name: "MapUpdate",
   publicInput: MapTransition,
+  overrideWrapDomain: 2,
 
   methods: {
     add: {
       privateInputs: [MapUpdateData],
 
-      method(state: MapTransition, update: MapUpdateData) {
+      async method(state: MapTransition, update: MapUpdateData) {
         //Provable.log("MapUpdate.add state.hash:", state.hash);
         const computedState = MapTransition.add(update);
         MapTransition.assertEquals(computedState, state);
@@ -327,7 +329,7 @@ const MapUpdate = ZkProgram({
     update: {
       privateInputs: [MapUpdateData, DomainName, Signature],
 
-      method(
+      async method(
         state: MapTransition,
         update: MapUpdateData,
         oldDomain: DomainName,
@@ -345,7 +347,7 @@ const MapUpdate = ZkProgram({
     extend: {
       privateInputs: [MapUpdateData, DomainName],
 
-      method(
+      async method(
         state: MapTransition,
         update: MapUpdateData,
         oldDomain: DomainName
@@ -358,7 +360,7 @@ const MapUpdate = ZkProgram({
     remove: {
       privateInputs: [MapUpdateData],
 
-      method(state: MapTransition, update: MapUpdateData) {
+      async method(state: MapTransition, update: MapUpdateData) {
         const computedState = MapTransition.remove(update);
         MapTransition.assertEquals(computedState, state);
       },
@@ -367,7 +369,7 @@ const MapUpdate = ZkProgram({
     reject: {
       privateInputs: [Field, UInt64, DomainTransaction],
 
-      method(
+      async method(
         state: MapTransition,
         root: Field,
         time: UInt64,
@@ -381,7 +383,7 @@ const MapUpdate = ZkProgram({
     merge: {
       privateInputs: [SelfProof, SelfProof],
 
-      method(
+      async method(
         newState: MapTransition,
         proof1: SelfProof<MapTransition, void>,
         proof2: SelfProof<MapTransition, void>
