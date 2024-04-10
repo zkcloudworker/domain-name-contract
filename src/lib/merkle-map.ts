@@ -1,4 +1,5 @@
-import { arrayProp, CircuitValue, Field, Bool, Poseidon, Provable } from "o1js";
+import { Field, Bool, Poseidon, Provable } from "o1js";
+import { arrayProp, CircuitValue } from "./circuit-value";
 import { MerkleTree, MerkleWitness } from "./merkle-tree";
 
 const bits = 255;

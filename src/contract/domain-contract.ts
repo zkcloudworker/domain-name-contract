@@ -129,7 +129,7 @@ export class BlockContract extends SmartContract {
   @state(Field) blockNumber = State<Field>();
   // TODO: pack Bool vars into one Field and add block number, add more statuses
 
-  deploy(args: DeployArgs) {
+  async deploy(args: DeployArgs) {
     super.deploy(args);
     this.account.permissions.set({
       ...Permissions.default(),
@@ -137,10 +137,10 @@ export class BlockContract extends SmartContract {
     });
   }
 
-  init() {
-    super.init();
-  }
-  @method validateBlock(data: ValidatorDecisionExtraData, tokenId: Field) {
+  @method async validateBlock(
+    data: ValidatorDecisionExtraData,
+    tokenId: Field
+  ) {
     data.verifyBlockValidationData({
       hash: this.txs.getAndRequireEquals(),
       storage: this.storage.getAndRequireEquals(),
@@ -161,7 +161,7 @@ export class BlockContract extends SmartContract {
     this.flags.set(flags.toField());
   }
 
-  @method badBlock(tokenId: Field) {
+  @method async badBlock(tokenId: Field) {
     const previousBlockContract = new BlockContract(
       this.previousBlock.getAndRequireEquals(),
       tokenId
@@ -177,7 +177,7 @@ export class BlockContract extends SmartContract {
     this.root.set(root);
   }
 
-  @method proveBlock(data: MapTransition, tokenId: Field) {
+  @method async proveBlock(data: MapTransition, tokenId: Field) {
     const flags = Flags.fromField(this.flags.getAndRequireEquals());
     flags.isFinal.assertEquals(Bool(false));
     flags.isValidated.assertEquals(Bool(true)); // We need to make sure that IPFS data is available and correct
@@ -210,7 +210,7 @@ export class DomainNameContract extends TokenContract {
   @state(PublicKey) lastBlock = State<PublicKey>();
   @state(PublicKey) lastProvedBlock = State<PublicKey>();
 
-  deploy(args: DeployArgs) {
+  async deploy(args: DeployArgs) {
     super.deploy(args);
     this.account.permissions.set({
       ...Permissions.default(),
@@ -224,7 +224,7 @@ export class DomainNameContract extends TokenContract {
     this.lastProvedBlock.set(PublicKey.empty());
   }
 
-  approveBase(forest: AccountUpdateForest) {
+  async approveBase(forest: AccountUpdateForest) {
     // https://discord.com/channels/484437221055922177/1215258350577647616
     // this.checkZeroBalanceChange(forest);
     //forest.isEmpty().assertEquals(Bool(true));
@@ -239,7 +239,7 @@ export class DomainNameContract extends TokenContract {
     setValidators: SetValidatorsEvent,
   };
 
-  @method block(
+  @method async block(
     proof: ValidatorsVotingProof,
     signature: Signature,
     data: BlockData,
@@ -306,7 +306,7 @@ export class DomainNameContract extends TokenContract {
     this.lastBlock.set(data.address);
   }
 
-  @method firstBlock(publicKey: PublicKey) {
+  @method async firstBlock(publicKey: PublicKey) {
     const lastBlock = this.lastBlock.getAndRequireEquals();
     lastBlock.equals(PublicKey.empty()).assertEquals(Bool(true));
     const tokenId = this.deriveTokenId();
@@ -341,7 +341,7 @@ export class DomainNameContract extends TokenContract {
     );
   }
 
-  @method validateBlock(proof: ValidatorsVotingProof) {
+  @method async validateBlock(proof: ValidatorsVotingProof) {
     this.checkValidatorsDecision(proof);
     proof.publicInput.decision.decision.assertEquals(
       ValidatorDecisionType.validate
@@ -351,21 +351,21 @@ export class DomainNameContract extends TokenContract {
       proof.publicInput.decision.address,
       tokenId
     );
-    block.validateBlock(proof.publicInput.decision.data, tokenId);
+    await block.validateBlock(proof.publicInput.decision.data, tokenId);
   }
 
-  @method proveBlock(proof: MapUpdateProof, blockAddress: PublicKey) {
+  @method async proveBlock(proof: MapUpdateProof, blockAddress: PublicKey) {
     const timestamp = this.network.timestamp.getAndRequireEquals();
     //Provable.log("proveBlock time", timestamp);
     timestamp.assertGreaterThan(proof.publicInput.time);
     proof.verify();
     const tokenId = this.deriveTokenId();
     const block = new BlockContract(blockAddress, tokenId);
-    block.proveBlock(proof.publicInput, tokenId);
+    await block.proveBlock(proof.publicInput, tokenId);
     this.lastProvedBlock.set(blockAddress);
   }
 
-  @method badBlock(proof: ValidatorsVotingProof) {
+  @method async badBlock(proof: ValidatorsVotingProof) {
     this.checkValidatorsDecision(proof);
     proof.publicInput.decision.decision.assertEquals(
       ValidatorDecisionType.badBlock
@@ -375,10 +375,10 @@ export class DomainNameContract extends TokenContract {
       proof.publicInput.decision.address,
       tokenId
     );
-    block.badBlock(tokenId);
+    await block.badBlock(tokenId);
   }
 
-  @method setValidators(proof: ValidatorsVotingProof) {
+  @method async setValidators(proof: ValidatorsVotingProof) {
     this.checkValidatorsDecision(proof);
     proof.publicInput.decision.decision.assertEquals(
       ValidatorDecisionType.setValidators

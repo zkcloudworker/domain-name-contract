@@ -871,12 +871,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^20.12.5":
-  version: 20.12.5
-  resolution: "@types/node@npm:20.12.5"
+"@types/node@npm:^20.12.7":
+  version: 20.12.7
+  resolution: "@types/node@npm:20.12.7"
   dependencies:
     undici-types: "npm:~5.26.4"
-  checksum: 10c0/2da65516fba98f0417620e42bddbe53e144d4782d69cd37f99df2537c6850b9cfbdb8a017f02c61e9a074bcac84f9f3f221b250474ac8c6b95d507a47e8d53f9
+  checksum: 10c0/dce80d63a3b91892b321af823d624995c61e39c6a223cc0ac481a44d337640cc46931d33efb3beeed75f5c85c3bda1d97cef4c5cd4ec333caf5dee59cff6eca0
   languageName: node
   linkType: hard
 
@@ -1463,15 +1463,15 @@ __metadata:
     "@jest/globals": "npm:^29.7.0"
     "@types/adm-zip": "npm:^0.5.5"
     "@types/jest": "npm:^29.5.12"
-    "@types/node": "npm:^20.12.5"
+    "@types/node": "npm:^20.12.7"
     adm-zip: "npm:^0.5.12"
     axios: "npm:^1.6.8"
     jest: "npm:^29.7.0"
-    o1js: "npm:^0.17.0"
+    o1js: "npm:^0.18.0"
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
     typescript: "npm:^5.4.4"
-    zkcloudworker: "npm:^0.2.19"
+    zkcloudworker: "npm:^0.3.0"
   languageName: unknown
   linkType: soft
 
@@ -2934,9 +2934,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"o1js@npm:^0.17.0":
-  version: 0.17.0
-  resolution: "o1js@npm:0.17.0"
+"o1js@npm:^0.18.0":
+  version: 0.18.0
+  resolution: "o1js@npm:0.18.0"
   dependencies:
     blakejs: "npm:1.2.1"
     cachedir: "npm:^2.4.0"
@@ -2946,7 +2946,7 @@ __metadata:
     tslib: "npm:^2.3.0"
   bin:
     snarky-run: src/build/run.js
-  checksum: 10c0/6a32df1a9ce5d034d7a8e2f4a4eeb3a466a90b4f44049faa689c920391510f0fc6413f9d450828649522df72b8916f9cd2c0d266008a4b17bfe3f2c7dbad01aa
+  checksum: 10c0/94e96feac3a560544b4c798abf8c0015a05b0cf36dd6c1f272f50768def9c2fcdd54ac0d1c4de0eb284dc27de49abc00fad5ef09e8a25f945a32381c3cd6d861
   languageName: node
   linkType: hard
 
@@ -3796,13 +3796,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zkcloudworker@npm:^0.2.19":
-  version: 0.2.19
-  resolution: "zkcloudworker@npm:0.2.19"
+"zkcloudworker@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "zkcloudworker@npm:0.3.0"
   dependencies:
     axios: "npm:^1.6.8"
   peerDependencies:
     o1js: ^0.17.0
-  checksum: 10c0/736752828eab0e35b539bedd24c9377af2d58cbc67e0beb3ec71660210684e18bd1a355f9125decd15570f18411181a3e4b7b46aacb89e0c7805b1bb46a4b4af
+  checksum: 10c0/790c90366d9234bd49bb7da6c55dbe881cd6d5f6b0a2a9b1b075a35fc54a2e072518df013adcd7df8cc25e9f5c2c4273b998a7f6e9ce07ba6cb604abe57d5143
   languageName: node
   linkType: hard

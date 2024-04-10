@@ -8,7 +8,8 @@ import {
  * This file contains all code related to the [Merkle Tree](https://en.wikipedia.org/wiki/Merkle_tree) implementation available in o1js.
  */
 
-import { CircuitValue, arrayProp, Poseidon, Bool, Field, Provable } from "o1js";
+import { Poseidon, Bool, Field, Provable } from "o1js";
+import { arrayProp, CircuitValue } from "./circuit-value";
 
 // external API
 export { Witness, MerkleTree, MerkleWitness, BaseMerkleWitness };
@@ -32,6 +33,7 @@ class MerkleTree {
   nodes: Record<number, Record<string, Field>> = {};
   private zeroes: Field[];
 
+  /*
   toJSON() {
     const nodes: {
       index: string;
@@ -49,8 +51,9 @@ class MerkleTree {
       nodes,
     };
   }
+  */
 
-  toCompressedJSON() {
+  toJSON() {
     const nodes: { [key: string]: string } = {};
     for (const level in this.nodes) {
       const node: string[] = [];
@@ -66,7 +69,7 @@ class MerkleTree {
     };
   }
 
-  static fromCompressedJSON(json: any) {
+  static fromJSON(json: any) {
     function convert(value: string, radix: number) {
       return [...value.toString()].reduce(
         (r, v) => r * BigInt(radix) + BigInt(parseInt(v, radix)),
@@ -87,7 +90,8 @@ class MerkleTree {
     return tree;
   }
 
-  static fromJSON(json: any) {
+  /*
+    static fromJSON(json: any) {
     const tree = new MerkleTree(json.height);
     for (const level of json.nodes) {
       for (const node of level.value) {
@@ -100,6 +104,7 @@ class MerkleTree {
     }
     return tree;
   }
+  */
 
   /**
    * Creates a new, empty [Merkle Tree](https://en.wikipedia.org/wiki/Merkle_tree).
@@ -260,23 +265,6 @@ class BaseMerkleWitness extends CircuitValue {
     for (let i = 1; i < n; ++i) {
       let isLeft = this.isLeft[i - 1];
       const [left, right] = maybeSwap(isLeft, hash, this.path[i - 1]);
-      hash = Poseidon.hash([left, right]);
-    }
-
-    return hash;
-  }
-
-  /**
-   * Calculates a root depending on the leaf value.
-   * @deprecated This is a less efficient version of {@link calculateRoot} which was added for compatibility with existing deployed contracts
-   */
-  calculateRootSlow(leaf: Field): Field {
-    let hash = leaf;
-    let n = this.height();
-
-    for (let i = 1; i < n; ++i) {
-      let isLeft = this.isLeft[i - 1];
-      const [left, right] = maybeSwapBad(isLeft, hash, this.path[i - 1]);
       hash = Poseidon.hash([left, right]);
     }
 

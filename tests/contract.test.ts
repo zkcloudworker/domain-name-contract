@@ -61,7 +61,7 @@ const api = new zkCloudWorkerClient({
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const ELEMENTS_NUMBER = 2;
+const ELEMENTS_NUMBER = 3;
 const BLOCKS_NUMBER = 3;
 const domainNames: string[][] = [];
 
@@ -124,20 +124,28 @@ describe("Domain Name Service Contract", () => {
     expect(deployer.toPublicKey().toBase58()).toBe(sender.toBase58());
 
     console.time("methods analyzed");
+    //console.log("Analyzing MapUpdate methods...");
+    const mapMethods = await MapUpdate.analyzeMethods();
+    //console.log("Analyzing BlockContract methods...");
+    const blockMethods = await BlockContract.analyzeMethods();
+    //console.log("Analyzing ValidatorsVoting methods...");
+    const validatorsMethods = await ValidatorsVoting.analyzeMethods();
+    //console.log("Analyzing DomainNameContract methods...");
+    const domainMethods = await DomainNameContract.analyzeMethods();
     const methods = [
       {
         name: "DomainNameContract",
-        result: DomainNameContract.analyzeMethods(),
+        result: domainMethods,
       },
-      { name: "BlockContract", result: BlockContract.analyzeMethods() },
+      { name: "BlockContract", result: blockMethods },
       {
         name: "ValidatorsVoting",
-        result: ValidatorsVoting.analyzeMethods(),
+        result: validatorsMethods,
         skip: true,
       },
       {
         name: "MapUpdate",
-        result: MapUpdate.analyzeMethods(),
+        result: mapMethods,
         skip: true,
       },
     ];
@@ -163,24 +171,28 @@ describe("Domain Name Service Contract", () => {
 
     console.time("compiled");
     console.log("Compiling contracts...");
-    verificationKey = (await ValidatorsVoting.compile()).verificationKey;
-    blockVerificationKey = (await BlockContract.compile()).verificationKey;
     mapVerificationKey = (await MapUpdate.compile()).verificationKey;
+    await sleep(10000);
+    //console.log("Map verification key:", mapVerificationKey.hash.toJSON());
+    verificationKey = (await ValidatorsVoting.compile()).verificationKey;
+    await sleep(10000);
+    blockVerificationKey = (await BlockContract.compile()).verificationKey;
+    await sleep(10000);
     await DomainNameContract.compile();
     console.timeEnd("compiled");
 
-    const tx = await Mina.transaction({ sender }, () => {
+    const tx = await Mina.transaction({ sender }, async () => {
       AccountUpdate.fundNewAccount(sender);
-      zkApp.deploy({});
+      await zkApp.deploy({});
       zkApp.validators.set(validatorsRoot);
       zkApp.validatorsHash.set(totalHash);
     });
 
     await tx.sign([deployer, contractPrivateKey]).send();
 
-    const tx2 = await Mina.transaction({ sender }, () => {
+    const tx2 = await Mina.transaction({ sender }, async () => {
       AccountUpdate.fundNewAccount(sender);
-      zkApp.firstBlock(nameContract.firstBlockPublicKey!);
+      await zkApp.firstBlock(nameContract.firstBlockPublicKey!);
     });
     await tx2.prove();
     await tx2.sign([deployer, nameContract.firstBlockPrivateKey!]).send();
@@ -308,8 +320,8 @@ describe("Domain Name Service Contract", () => {
       false
     );
 
-    const tx2 = await Mina.transaction({ sender }, () => {
-      zkApp.setValidators(proof);
+    const tx2 = await Mina.transaction({ sender }, async () => {
+      await zkApp.setValidators(proof);
     });
     await tx2.prove();
     await tx2.sign([deployer]).send();
