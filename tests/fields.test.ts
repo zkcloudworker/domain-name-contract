@@ -1,13 +1,13 @@
 import { describe, expect, it } from "@jest/globals";
 import { Field, PrivateKey, PublicKey, Signature } from "o1js";
 import { serializeFields, deserializeFields } from "../src/lib/fields";
+import { fieldToBase64, fieldFromBase64 } from "../src/lib/base64";
 import {
   DomainName,
   DomainTransactionEnum,
   DomainTransaction,
   DomainTransactionData,
 } from "../src/rollup/transaction";
-import exp from "constants";
 
 const ELEMENTS_NUMBER = 10;
 
@@ -20,9 +20,32 @@ describe("Map", () => {
     }
   });
 
+  it(`should convert Field to base64`, async () => {
+    const f = Field(64);
+    const str = fieldToBase64(f);
+    console.log("base58:", str);
+    const f1 = fieldFromBase64(str);
+    expect(f1.toJSON()).toEqual(f.toJSON());
+  });
+
   it(`should convert Fields to string`, async () => {
     str = serializeFields(elements);
     //console.log(str);
+  });
+
+  it(`should convert Fields to base64`, async () => {
+    for (let i = 0; i < ELEMENTS_NUMBER; i++) {
+      const f = Field.random();
+      const str = fieldToBase64(f);
+      const f1 = fieldFromBase64(str);
+      expect(f1.toJSON()).toEqual(f.toJSON());
+    }
+    for (let j = 0; j < 100; j++) {
+      const f = Field(j);
+      const str = fieldToBase64(f);
+      const f1 = fieldFromBase64(str);
+      expect(f1.toJSON()).toEqual(f.toJSON());
+    }
   });
 
   it(`should convert string to Fields`, async () => {
@@ -54,8 +77,8 @@ describe("Map", () => {
     const signature = Signature.create(PrivateKey.random(), [Field(1)]);
     const data: DomainTransactionData = new DomainTransactionData(
       tx,
-      domainName
-      //signature
+      domainName,
+      signature
     );
     const json = data.toJSON();
     const str = JSON.stringify(json, null, 2);

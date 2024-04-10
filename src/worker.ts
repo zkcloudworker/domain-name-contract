@@ -95,6 +95,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
   public async create(transaction: string): Promise<string | undefined> {
     await this.compile();
+    console.time("proof created");
 
     if (DomainNameServiceWorker.mapUpdateVerificationKey === undefined)
       throw new Error("verificationKey is undefined");
@@ -125,6 +126,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       DomainNameServiceWorker.mapUpdateVerificationKey
     );
     if (!ok) throw new Error("proof verification failed");
+    console.timeEnd("proof created");
     return JSON.stringify(proof.toJSON(), null, 2);
   }
 
@@ -136,7 +138,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     try {
       if (DomainNameServiceWorker.mapUpdateVerificationKey === undefined)
         throw new Error("verificationKey is undefined");
-      console.time("merge mapPoof");
+      console.time("proof merged");
 
       const sourceProof1: MapUpdateProof = MapUpdateProof.fromJSON(
         JSON.parse(proof1) as JsonProof
@@ -154,7 +156,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         DomainNameServiceWorker.mapUpdateVerificationKey
       );
       if (!ok) throw new Error("proof verification failed");
-      console.timeEnd("merge mapPoof");
+      console.timeEnd("proof merged");
       return JSON.stringify(proof.toJSON(), null, 2);
     } catch (error) {
       console.log("Error in merge", error);
@@ -277,7 +279,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const txSent = await tx.sign([deployer]).send();
     if (txSent.status !== "pending")
       throw new Error("Error sending block proving transaction");
-    console.log("Deleting proveBlock task", this.cloud.taskId);
+    //console.log("Deleting proveBlock task", this.cloud.taskId);
     console.log(`Block ${args.blockNumber} is proved`);
     await this.cloud.deleteTask(this.cloud.taskId);
     return txSent.hash;
@@ -289,7 +291,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     if (this.cloud.args === undefined)
       throw new Error("this.cloud.args is undefined");
     const args = JSON.parse(this.cloud.args);
-    console.log(`Validating block ${args.blockNumber}...`);
+    console.time(`block ${args.blockNumber} validated`);
     if (args.contractAddress === undefined)
       throw new Error("args.contractAddress is undefined");
     if (args.blockAddress === undefined)
@@ -297,7 +299,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     let validated = true;
     let decision: ValidatorsDecision | undefined = undefined;
     let proofData: string[] = [];
-    console.time(`block validated`);
     const contractAddress = PublicKey.fromBase58(args.contractAddress);
     const blockAddress = PublicKey.fromBase58(args.blockAddress);
     const zkApp = new DomainNameContract(contractAddress);
@@ -324,9 +325,9 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       const mapJson = JSON.parse(mapData);
       let database = new DomainDatabase();
 
-      console.log("blockNumber", blockNumber);
+      //console.log("blockNumber", blockNumber);
       if (blockNumber > 1) {
-        console.log("getting previous block data for validation...");
+        //console.log("getting previous block data for validation...");
         const previousBlockStorage = previousBlock.storage.get();
         const previousBlockRoot = previousBlock.root.get();
         const previousBlockHash = previousBlockStorage.toIpfsHash();
@@ -378,7 +379,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         throw new Error("Invalid block root");
       if (root.toJSON() !== loadedDatabase.getRoot().toJSON())
         throw new Error("Invalid block root");
-      console.log(`Block ${blockNumber} is valid`);
+      //console.log(`Block ${blockNumber} is valid`);
       decision = new ValidatorsDecision({
         contract: contractAddress,
         chainId: getNetworkIdHash(),
@@ -445,7 +446,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const txSent = await tx.sign([deployer]).send();
     if (txSent.status !== "pending")
       throw new Error("Error sending block creation transaction");
-    console.log("Deleting validateBlock task", this.cloud.taskId);
+    //console.log("Deleting validateBlock task", this.cloud.taskId);
     await this.cloud.deleteTask(this.cloud.taskId);
     if (validated) {
       const jobId = await this.cloud.recursiveProof({
@@ -471,8 +472,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         userId: this.cloud.userId,
       });
     }
-    console.log(`Block ${args.blockNumber} is validated`);
-    console.timeEnd(`block validated`);
+    console.timeEnd(`block ${args.blockNumber} validated`);
     return txSent.hash;
   }
 
