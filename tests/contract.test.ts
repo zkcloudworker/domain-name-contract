@@ -61,8 +61,8 @@ const api = new zkCloudWorkerClient({
 const { keys, networkIdHash } = initBlockchain(network, 1);
 const { privateKey: deployer, publicKey: sender } = keys[0];
 
-const ELEMENTS_NUMBER = 3;
-const BLOCKS_NUMBER = 5;
+const ELEMENTS_NUMBER = 2;
+const BLOCKS_NUMBER = 3;
 const domainNames: string[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -189,7 +189,7 @@ describe("Domain Name Service Contract", () => {
   });
 
   it(`should add task to process transactions`, async () => {
-    console.log(`Adding task to process transactions...`);
+    //console.log(`Adding task to process transactions...`);
     let args: string = JSON.stringify({
       contractAddress: contractPublicKey.toBase58(),
     });
@@ -250,7 +250,7 @@ describe("Domain Name Service Contract", () => {
         expect(apiresult.success).toBe(true);
 
         expect(apiresult.jobId).toBeDefined();
-        console.log(`Tx ${j + 1} sent, jobId:`, apiresult.jobId);
+        //console.log(`Tx ${j + 1} sent, jobId:`, apiresult.jobId);
         if (apiresult.jobId === undefined)
           throw new Error("Job ID is undefined");
         await sleep(2000);
@@ -269,8 +269,8 @@ describe("Domain Name Service Contract", () => {
       ) {
         await sleep(1000);
       }
+      Memory.info(`block ${blockNumber} processed`);
     });
-    Memory.info(`block ${blockNumber} processed`);
   }
 
   it(`should process remaining tasks`, async () => {

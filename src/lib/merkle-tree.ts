@@ -1,3 +1,9 @@
+import {
+  fieldToBase64,
+  fieldFromBase64,
+  bigintFromBase64,
+  bigintToBase64,
+} from "./base64";
 /**
  * This file contains all code related to the [Merkle Tree](https://en.wikipedia.org/wiki/Merkle_tree) implementation available in o1js.
  */
@@ -49,8 +55,8 @@ class MerkleTree {
     for (const level in this.nodes) {
       const node: string[] = [];
       for (const index in this.nodes[level]) {
-        node.push(BigInt(index).toString(36));
-        node.push(this.nodes[level][index].toBigInt().toString(36));
+        node.push(bigintToBase64(BigInt(index)));
+        node.push(fieldToBase64(this.nodes[level][index]));
       }
       nodes[level] = node.join(".");
     }
@@ -73,8 +79,8 @@ class MerkleTree {
       for (let i = 0; i < node.length; i += 2) {
         tree.setNode(
           parseInt(level),
-          BigInt(convert(node[i], 36)),
-          Field(BigInt(convert(node[i + 1], 36)))
+          bigintFromBase64(node[i]),
+          fieldFromBase64(node[i + 1])
         );
       }
     }
