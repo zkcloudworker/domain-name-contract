@@ -2,7 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import { accountBalanceMina, initBlockchain } from "zkcloudworker";
 import { PublicKey, Mina } from "o1js";
 
-const endpoint = "https://proxy.devnet.minaexplorer.com/graphql";
+const endpoint = "https://proxy.devnet.minaexplorer.com/graphql"; //"https://api.minascan.io/node/devnet/v1/graphql";
 
 describe("Balance", () => {
   it(`should get the balance`, async () => {
@@ -18,6 +18,10 @@ describe("Balance", () => {
       "B62qiTrtDyWmDFMQvUDRUdWVsVwNFhUV4rkPVgeANi4adKhrUwfdNFT"
     );
 
+    const receiver3 = PublicKey.fromBase58(
+      "B62qngSxawPjF2sce2uf98n3dyL1LM6MwsSwC1MRn7LQqfypiLWFGPd"
+    );
+
     console.log(
       "balance of the receiver1:",
       await accountBalanceMina(receiver1)
@@ -25,6 +29,10 @@ describe("Balance", () => {
     console.log(
       "balance of the receiver2:",
       await accountBalanceMina(receiver2)
+    );
+    console.log(
+      "balance of the receiver3:",
+      await accountBalanceMina(receiver3)
     );
   });
 });
