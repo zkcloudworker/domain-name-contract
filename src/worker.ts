@@ -34,32 +34,32 @@ import {
 import { Storage } from "./contract/storage";
 import { deserializeFields } from "./lib/fields";
 
-import { validatorsPrivateKeys } from "../src/config";
+import { validatorsPrivateKeys } from "./config";
 import {
   ValidatorsDecision,
   ValidatorDecisionExtraData,
   ValidatorsVoting,
   ValidatorsVotingProof,
   ValidatorDecisionType,
-} from "../src/rollup/validators";
+} from "./rollup/validators";
 import {
   DomainNameContract,
   BlockContract,
   BlockData,
   NewBlockTransactions,
   Flags,
-} from "../src/contract/domain-contract";
-import { stringToFields } from "../src/lib/hash";
+} from "./contract/domain-contract";
+import { stringToFields } from "./lib/hash";
 import {
   getValidatorsTreeAndHash,
   calculateValidatorsProof,
-} from "../src/rollup/validators-proof";
+} from "./rollup/validators-proof";
 
-import { createBlock } from "../src/rollup/blocks";
-import { MerkleMap } from "../src/lib/merkle-map";
-import { MerkleTree } from "../src/lib/merkle-tree";
-import { DomainDatabase } from "../src/rollup/database";
-import { saveToIPFS, loadFromIPFS } from "../src/contract/storage";
+import { createBlock } from "./rollup/blocks";
+import { MerkleMap } from "./lib/merkle-map";
+import { MerkleTree } from "./lib/merkle-tree";
+import { DomainDatabase } from "./rollup/database";
+import { saveToIPFS, loadFromIPFS } from "./contract/storage";
 import { p } from "o1js/dist/node/bindings/crypto/finite-field";
 const pinataJWT = process.env.PINATA_JWT ?? "local";
 const fullValidation = true;
@@ -277,8 +277,11 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
     await tx.prove();
     const txSent = await tx.sign([deployer]).send();
-    if (txSent.status !== "pending")
-      throw new Error("Error sending block proving transaction");
+    if (txSent.status !== "pending") {
+      await this.cloud.releaseDeployer([]);
+      throw new Error("Error sending block creation transaction");
+    }
+    await this.cloud.releaseDeployer([txSent.hash]);
     //console.log("Deleting proveBlock task", this.cloud.taskId);
     console.log(`Block ${args.blockNumber} is proved`);
     await this.cloud.deleteTask(this.cloud.taskId);
@@ -446,8 +449,11 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
     await tx.prove();
     const txSent = await tx.sign([deployer]).send();
-    if (txSent.status !== "pending")
+    if (txSent.status !== "pending") {
+      await this.cloud.releaseDeployer([]);
       throw new Error("Error sending block creation transaction");
+    }
+    await this.cloud.releaseDeployer([txSent.hash]);
     //console.log("Deleting validateBlock task", this.cloud.taskId);
     await this.cloud.deleteTask(this.cloud.taskId);
     if (validated) {
@@ -540,7 +546,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
     const strMapJson = JSON.stringify(mapJson, null, 2);
     const mapHash = await saveToIPFS(strMapJson, pinataJWT);
-    expect(mapHash).toBeDefined();
     if (mapHash === undefined) throw new Error("mapHash is undefined");
     const json = {
       txs: transactions,
@@ -549,7 +554,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     };
     const strJson = JSON.stringify(json, null, 2);
     const hash = await saveToIPFS(strJson, pinataJWT);
-    expect(hash).toBeDefined();
     if (hash === undefined) throw new Error("hash is undefined");
 
     console.log(
@@ -645,8 +649,11 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
     await tx.prove();
     const txSent = await tx.sign([deployer, blockPrivateKey]).send();
-    if (txSent.status !== "pending")
+    if (txSent.status !== "pending") {
+      await this.cloud.releaseDeployer([]);
       throw new Error("Error sending block creation transaction");
+    }
+    await this.cloud.releaseDeployer([txSent.hash]);
     await this.cloud.addTask({
       args: JSON.stringify(
         {

@@ -15,7 +15,7 @@ describe("Payment", () => {
     const receiver2 = PrivateKey.random().toPublicKey();
     const transaction = await Mina.transaction(
       { sender, fee: "100000000", memo: "domain name service tx1" },
-      () => {
+      async () => {
         AccountUpdate.fundNewAccount(sender, 2);
         const senderUpdate1 = AccountUpdate.create(sender);
         senderUpdate1.requireSignature();
@@ -34,6 +34,25 @@ describe("Payment", () => {
       await accountBalanceMina(receiver2)
     );
   });
+
+  it(`should send non-zkApp payments to 1 address`, async () => {
+    const Local = Mina.LocalBlockchain();
+    Mina.setActiveInstance(Local);
+    const deployer = Local.testAccounts[0].privateKey;
+    const sender = deployer.toPublicKey();
+    const receiver = PrivateKey.random().toPublicKey();
+    const transaction = await Mina.transaction(
+      { sender, fee: "100000000", memo: "payment" },
+      async () => {
+        const senderUpdate = AccountUpdate.createSigned(sender);
+        senderUpdate.balance.subInPlace(1000000000);
+        senderUpdate.send({ to: receiver, amount: AMOUNT });
+      }
+    );
+    await transaction.sign([deployer]).send();
+    console.log("balance of the receiver:", await accountBalanceMina(receiver));
+  });
+
   it(`should send non-zkApp payments to 2 addresses`, async () => {
     const Local = Mina.LocalBlockchain();
     Mina.setActiveInstance(Local);
@@ -43,7 +62,7 @@ describe("Payment", () => {
     const receiver2 = PrivateKey.random().toPublicKey();
     const transaction = await Mina.transaction(
       { sender, fee: "100000000", memo: "domain name service tx2" },
-      () => {
+      async () => {
         const senderUpdate1 = AccountUpdate.createSigned(sender);
         senderUpdate1.balance.subInPlace(2000000000);
         senderUpdate1.send({ to: receiver1, amount: AMOUNT });
@@ -60,6 +79,7 @@ describe("Payment", () => {
       await accountBalanceMina(receiver2)
     );
   });
+
   it(`should send 2 non-zkApp payment to 2 addresses`, async () => {
     const Local = Mina.LocalBlockchain();
     Mina.setActiveInstance(Local);
@@ -73,7 +93,7 @@ describe("Payment", () => {
     console.log("balance of the sender2:", await accountBalanceMina(sender2));
     const transaction = await Mina.transaction(
       { sender: sender1, fee: "100000000", memo: "domain name service tx3" },
-      () => {
+      async () => {
         const senderUpdate1 = AccountUpdate.createSigned(sender1);
         senderUpdate1.balance.subInPlace(1000000000);
         senderUpdate1.send({ to: receiver1, amount: AMOUNT });

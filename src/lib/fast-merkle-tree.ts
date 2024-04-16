@@ -44,7 +44,7 @@ export class FastMerkleTree {
 
     const levelZeroNodes = this.nodes[0];
     if (!levelZeroNodes) {
-      return [];
+      return;
     }
 
     const nodes = Object.entries(levelZeroNodes).map(([index, digest]) => ({

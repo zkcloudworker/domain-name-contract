@@ -7,6 +7,8 @@ import {
   AccountUpdate,
   VerificationKey,
   UInt64,
+  checkZkappTransaction,
+  PublicKey,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -58,9 +60,8 @@ const api = new zkCloudWorkerClient({
   chain: "local",
 });
 
-const { keys, networkIdHash } = initBlockchain(network, 1);
-const { privateKey: deployer, publicKey: sender } = keys[0];
-
+let deployer: PrivateKey;
+let sender: PublicKey;
 const ELEMENTS_NUMBER = 3;
 const BLOCKS_NUMBER = 3;
 const domainNames: string[][] = [];
@@ -113,9 +114,12 @@ describe("Domain Name Service Contract", () => {
   });
 
   it(`should compile and deploy contract`, async () => {
+    const { keys, networkIdHash } = await initBlockchain(network, 1);
+    const { privateKey, publicKey } = keys[0];
+    deployer = privateKey;
+    sender = publicKey;
     const networkId = Mina.getNetworkId();
     console.log("Network ID:", networkId);
-    const networkIdHash = getNetworkIdHash();
     console.log("Network ID hash:", networkIdHash.toJSON());
     //console.log("sender", sender.toBase58());
     console.log("Sender balance", await accountBalanceMina(sender));
@@ -303,7 +307,7 @@ describe("Domain Name Service Contract", () => {
     console.log(`Changing validators...`);
     const decision = new ValidatorsDecision({
       contract: contractPublicKey,
-      chainId: networkIdHash,
+      chainId: getNetworkIdHash(),
       root: validatorsRoot,
       decision: ValidatorDecisionType.setValidators,
       address: PrivateKey.random().toPublicKey(),
