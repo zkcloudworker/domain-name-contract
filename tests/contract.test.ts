@@ -176,12 +176,8 @@ describe("Domain Name Service Contract", () => {
     console.time("compiled");
     console.log("Compiling contracts...");
     mapVerificationKey = (await MapUpdate.compile()).verificationKey;
-    await sleep(10000);
-    //console.log("Map verification key:", mapVerificationKey.hash.toJSON());
     verificationKey = (await ValidatorsVoting.compile()).verificationKey;
-    await sleep(10000);
     blockVerificationKey = (await BlockContract.compile()).verificationKey;
-    await sleep(10000);
     await DomainNameContract.compile();
     console.timeEnd("compiled");
 
