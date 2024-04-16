@@ -50,7 +50,7 @@ import { MerkleMap } from "./lib/merkle-map";
 import { MerkleTree } from "./lib/merkle-tree";
 import { DomainDatabase } from "./rollup/database";
 import { saveToIPFS, loadFromIPFS } from "./contract/storage";
-const pinataJWT = process.env.PINATA_JWT;
+const pinataJWT = process.env.PINATA_JWT!;
 const fullValidation = true;
 
 export class DomainNameServiceWorker extends zkCloudWorker {
@@ -189,6 +189,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
   private async txTask(): Promise<string | undefined> {
     const transactions = await this.cloud.getTransactions();
+    console.log(
+      `txTask with ${transactions.length} transactions`,
+      transactions
+    );
     if (transactions.length !== 0) {
       // sort by timeReceived, ascending
       transactions.sort((a, b) => a.timeReceived - b.timeReceived);
@@ -260,9 +264,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     await fetchAccount({ publicKey: sender });
     await fetchAccount({ publicKey: contractAddress });
     await fetchAccount({ publicKey: blockAddress, tokenId });
+    const blockNumber = args.blockNumber;
 
     const tx = await Mina.transaction(
-      { sender, fee: await fee(), memo: "zkCloudWorker" },
+      { sender, fee: await fee(), memo: `block ${blockNumber} is proved` },
       async () => {
         await zkApp.proveBlock(proof, blockAddress);
       }
@@ -301,6 +306,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const tokenId = zkApp.deriveTokenId();
     const validatorsRoot = zkApp.validators.get();
     const validatorsHash = zkApp.validatorsHash.get();
+    let blockNumber = 0;
     try {
       await fetchAccount({ publicKey: contractAddress });
       await fetchAccount({ publicKey: blockAddress, tokenId });
@@ -308,7 +314,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       const previousBlockAddress = block.previousBlock.get();
       await fetchAccount({ publicKey: previousBlockAddress, tokenId });
       const previousBlock = new BlockContract(previousBlockAddress, tokenId);
-      const blockNumber = Number(block.blockNumber.get().toBigInt());
+      blockNumber = Number(block.blockNumber.get().toBigInt());
 
       const map = new MerkleMap();
       const oldMap = new MerkleMap();
@@ -439,7 +445,13 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     await fetchAccount({ publicKey: blockAddress, tokenId });
 
     const tx = await Mina.transaction(
-      { sender, fee: await fee(), memo: "zkCloudWorker" },
+      {
+        sender,
+        fee: await fee(),
+        memo: validated
+          ? `block ${blockNumber} is valid`
+          : `block ${blockNumber} is invalid`,
+      },
       async () => {
         validated
           ? await zkApp.validateBlock(proof)
@@ -546,25 +558,36 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         throw new Error("Invalid root");
     }
 
-    const strMapJson = JSON.stringify(mapJson, null, 2);
-    const mapHash = await saveToIPFS(strMapJson, pinataJWT);
+    const blockPrivateKey = PrivateKey.random();
+    const blockPublicKey = blockPrivateKey.toPublicKey();
+
+    const mapHash = await saveToIPFS({
+      data: mapJson,
+      pinataJWT,
+      name: `block.${blockNumber}.map.json`,
+    });
     if (mapHash === undefined) throw new Error("mapHash is undefined");
     const json = {
+      blockNumber,
+      timeCreated: Date.now(),
+      contractAddress: contractAddress.toBase58(),
+      blockAddress: blockPublicKey.toBase58(),
       txs: transactions,
       database: database.data,
       map: "i:" + mapHash,
     };
-    const strJson = JSON.stringify(json, null, 2);
-    const hash = await saveToIPFS(strJson, pinataJWT);
+    const hash = await saveToIPFS({
+      data: json,
+      pinataJWT,
+      name: `block.${blockNumber}.json`,
+    });
     if (hash === undefined) throw new Error("hash is undefined");
 
     console.log(
-      `Block ${blockNumber} JSON size: ${strJson.length.toLocaleString()}, map JSON size: ${strMapJson.length.toLocaleString()}`
+      `Block ${blockNumber} created with hash ${hash} and map hash ${mapHash}`
     );
 
     const blockStorage = Storage.fromIpfsHash(hash);
-    const blockPrivateKey = PrivateKey.random();
-    const blockPublicKey = blockPrivateKey.toPublicKey();
     const blockProducerPrivateKey = PrivateKey.random();
     const blockProducerPublicKey = blockProducerPrivateKey.toPublicKey();
     if (DomainNameServiceWorker.blockContractVerificationKey === undefined) {
@@ -644,7 +667,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     await fetchAccount({ publicKey: contractAddress });
 
     const tx = await Mina.transaction(
-      { sender, fee: await fee(), memo: "zkCloudWorker" },
+      { sender, fee: await fee(), memo: `block ${blockNumber}` },
       async () => {
         AccountUpdate.fundNewAccount(sender);
         await zkApp.block(proof, signature, blockData, blockVerificationKey);
