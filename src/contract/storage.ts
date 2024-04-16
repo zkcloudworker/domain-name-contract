@@ -41,11 +41,13 @@ export class Storage extends Struct({
 const ipfsData: { [key: string]: string } = {};
 let useLocalIpfsData = false;
 
-export async function saveToIPFS(
-  data: any,
-  PinataJWT: string | undefined
-): Promise<string | undefined> {
-  if (PinataJWT === "local") {
+export async function saveToIPFS(params: {
+  data: any;
+  pinataJWT: string;
+  name: string;
+}): Promise<string | undefined> {
+  const { data, pinataJWT, name } = params;
+  if (pinataJWT === "local") {
     const hash = makeString(
       `QmTosaezLecDB7bAoUoXcrJzeBavHNZyPbPff1QHWw8xus`.length
     );
@@ -55,8 +57,17 @@ export async function saveToIPFS(
   }
 
   try {
-    const str = JSON.stringify(data, null, 2);
-    const auth = "Bearer " + PinataJWT ?? "";
+    const pinataData = {
+      pinataOptions: {
+        cidVersion: 1,
+      },
+      pinataMetadata: {
+        name,
+      },
+      pinataContent: data,
+    };
+    const str = JSON.stringify(pinataData);
+    const auth = "Bearer " + pinataJWT ?? "";
 
     const config = {
       headers: {
@@ -93,8 +104,8 @@ export async function loadFromIPFS(hash: string): Promise<any | undefined> {
       hash +
       "?pinataGatewayToken=gFuDmY7m1Pa5XzZ3bL1TjPPvO4Ojz6tL-VGIdweN1fUa5oSFZXce3y9mL8y1nSSU";
     //"https://gateway.pinata.cloud/ipfs/" + hash;
-    const data = (await axios.get(url)).data;
-    return data;
+    const result = await axios.get(url);
+    return result.data;
   } catch (error: any) {
     console.error("loadFromIPFS:", error);
     return undefined;
