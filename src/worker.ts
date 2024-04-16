@@ -1,11 +1,9 @@
 import {
   zkCloudWorker,
   Cloud,
-  sleep,
   fee,
   DeployedSmartContract,
   getNetworkIdHash,
-  CloudTransaction,
 } from "zkcloudworker";
 import os from "os";
 import assert from "node:assert/strict";
@@ -18,7 +16,6 @@ import {
   Signature,
   fetchAccount,
   Mina,
-  setNumberOfWorkers,
   PrivateKey,
   AccountUpdate,
   UInt64,
@@ -34,7 +31,6 @@ import {
 import { Storage } from "./contract/storage";
 import { deserializeFields } from "./lib/fields";
 
-import { validatorsPrivateKeys } from "./config";
 import {
   ValidatorsDecision,
   ValidatorDecisionExtraData,
@@ -46,22 +42,15 @@ import {
   DomainNameContract,
   BlockContract,
   BlockData,
-  NewBlockTransactions,
-  Flags,
 } from "./contract/domain-contract";
-import { stringToFields } from "./lib/hash";
-import {
-  getValidatorsTreeAndHash,
-  calculateValidatorsProof,
-} from "./rollup/validators-proof";
+import { calculateValidatorsProof } from "./rollup/validators-proof";
 
 import { createBlock } from "./rollup/blocks";
 import { MerkleMap } from "./lib/merkle-map";
 import { MerkleTree } from "./lib/merkle-tree";
 import { DomainDatabase } from "./rollup/database";
 import { saveToIPFS, loadFromIPFS } from "./contract/storage";
-import { p } from "o1js/dist/node/bindings/crypto/finite-field";
-const pinataJWT = process.env.PINATA_JWT ?? "local";
+const pinataJWT = process.env.PINATA_JWT;
 const fullValidation = true;
 
 export class DomainNameServiceWorker extends zkCloudWorker {
@@ -263,10 +252,14 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const contractAddress = PublicKey.fromBase58(args.contractAddress);
     const blockAddress = PublicKey.fromBase58(args.blockAddress);
     const zkApp = new DomainNameContract(contractAddress);
+    const tokenId = zkApp.deriveTokenId();
 
     const deployer = await this.cloud.getDeployer();
     if (deployer === undefined) throw new Error("deployer is undefined");
     const sender = deployer.toPublicKey();
+    await fetchAccount({ publicKey: sender });
+    await fetchAccount({ publicKey: contractAddress });
+    await fetchAccount({ publicKey: blockAddress, tokenId });
 
     const tx = await Mina.transaction(
       { sender, fee: await fee(), memo: "zkCloudWorker" },
@@ -305,12 +298,15 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const contractAddress = PublicKey.fromBase58(args.contractAddress);
     const blockAddress = PublicKey.fromBase58(args.blockAddress);
     const zkApp = new DomainNameContract(contractAddress);
+    const tokenId = zkApp.deriveTokenId();
     const validatorsRoot = zkApp.validators.get();
     const validatorsHash = zkApp.validatorsHash.get();
     try {
-      const tokenId = zkApp.deriveTokenId();
+      await fetchAccount({ publicKey: contractAddress });
+      await fetchAccount({ publicKey: blockAddress, tokenId });
       const block = new BlockContract(blockAddress, tokenId);
       const previousBlockAddress = block.previousBlock.get();
+      await fetchAccount({ publicKey: previousBlockAddress, tokenId });
       const previousBlock = new BlockContract(previousBlockAddress, tokenId);
       const blockNumber = Number(block.blockNumber.get().toBigInt());
 
@@ -438,6 +434,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     if (deployer === undefined) throw new Error("deployer is undefined");
     const sender = deployer.toPublicKey();
 
+    await fetchAccount({ publicKey: sender });
+    await fetchAccount({ publicKey: contractAddress });
+    await fetchAccount({ publicKey: blockAddress, tokenId });
+
     const tx = await Mina.transaction(
       { sender, fee: await fee(), memo: "zkCloudWorker" },
       async () => {
@@ -495,8 +495,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const contractAddress = PublicKey.fromBase58(args.contractAddress);
     const zkApp = new DomainNameContract(contractAddress);
     const tokenId = zkApp.deriveTokenId();
+    await fetchAccount({ publicKey: contractAddress });
     const previousBlockAddress = zkApp.lastBlock.get();
     const previousBlock = new BlockContract(previousBlockAddress, tokenId);
+    await fetchAccount({ publicKey: previousBlockAddress, tokenId });
     const blockNumber = Number(previousBlock.blockNumber.get().toBigInt()) + 1;
     console.time(`block ${blockNumber} created`);
     const validatorsRoot = zkApp.validators.get();
@@ -638,6 +640,8 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const deployer = await this.cloud.getDeployer();
     if (deployer === undefined) throw new Error("deployer is undefined");
     const sender = deployer.toPublicKey();
+    await fetchAccount({ publicKey: sender });
+    await fetchAccount({ publicKey: contractAddress });
 
     const tx = await Mina.transaction(
       { sender, fee: await fee(), memo: "zkCloudWorker" },
