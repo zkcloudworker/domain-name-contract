@@ -71,7 +71,7 @@ const api = new zkCloudWorkerClient({
 
 let deployer: PrivateKey;
 let sender: PublicKey;
-const ELEMENTS_NUMBER = 1;
+const ELEMENTS_NUMBER = 3;
 const BLOCKS_NUMBER = 1;
 const domainNames: string[][] = [];
 
@@ -424,7 +424,7 @@ describe("Domain Name Service Contract", () => {
           chain: "local",
         })) > 1
       ) {
-        await sleep(1000);
+        await sleep(30000);
       }
       Memory.info(`block ${blockNumber} processed`);
     }
@@ -437,7 +437,7 @@ describe("Domain Name Service Contract", () => {
         chain: "local",
       })) > 1
     ) {
-      await sleep(1000);
+      await sleep(30000);
     }
   });
 
