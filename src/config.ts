@@ -3,24 +3,29 @@ import { PrivateKey, PublicKey } from "o1js";
 interface ContractConfig {
   contractPrivateKey: PrivateKey;
   contractAddress: string;
-  ownerPrivateKey: PrivateKey;
   firstBlockPrivateKey?: PrivateKey;
   firstBlockPublicKey?: PublicKey;
 }
 
 export const nameContract: ContractConfig = {
   contractPrivateKey: PrivateKey.fromBase58(
-    "EKFYqSKXWHWVX7MyTE5o2yXfpfJ2iPmY26CoKcbKd4cBEYngqc6u"
+    "EKEcXQM5EyYzbZMMKhohE7MGabXu2s1F4LEk1mp28u1htUJn8Nya"
   ),
-  contractAddress: "B62qm6vHKPPLAMSitQcNMEUTbJAq1VeLzdnVHBvUKhADwezsD7hNAME",
-  ownerPrivateKey: PrivateKey.fromBase58(
-    "EKFRg9MugtXvFPe4N6Au28kQyYx9txt4CVPgBPRYdv4wvbKBJpEy"
-  ),
+  contractAddress: "B62qqFsiNrTv6f9Nx6qe51udGvS2Sn8LUBHEX4iDyTXwMKZvWkENAME",
   firstBlockPrivateKey: PrivateKey.fromBase58(
     "EKDjCdQMYuc6F3XRRSmCaWYH1WiMUXHHQkvzgKBp9NnhA9PHGXwf"
   ),
   firstBlockPublicKey: PublicKey.fromBase58(
     "B62qpRmnH6SU4hZ9Z9JLm877SUaHSahFhu1nTwiPzJgmsZ2AsMnNAME"
+  ),
+};
+
+export const blockProducer = {
+  publicKey: PublicKey.fromBase58(
+    "B62qrjVdai5dwVie36KGy5cYrLN9YfB2EJ5mRXSEVcnzrA3Q3AqNAME"
+  ),
+  privateKey: PrivateKey.fromBase58(
+    "EKDqL5JFFqfL9UGUuUpJiDGnYWxdB1tmcYUbWH8iAxWSMkYs25bz"
   ),
 };
 
@@ -31,7 +36,3 @@ export const validatorsPrivateKeys: PrivateKey[] = [
 
 export const JWT =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY0NTkwMzQ5NDYiLCJpYXQiOjE3MDEzNTY5NzEsImV4cCI6MTczMjg5Mjk3MX0.r94tKntDvLpPJT2zzEe7HMUcOAQYQu3zWNuyFFiChD0";
-
-export const deployer = PrivateKey.fromBase58(
-  "EKDzixo6SWARNNSbS8PrGd8PPPSPfneJWcC2dFgmeWmbSk6uj12z"
-);

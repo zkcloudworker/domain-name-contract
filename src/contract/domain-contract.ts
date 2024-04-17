@@ -18,8 +18,8 @@ import {
   VerificationKey,
   Poseidon,
   MerkleMap,
+  Provable,
 } from "o1js";
-import { getNetworkIdHash } from "zkcloudworker";
 import { Storage } from "./storage";
 import {
   ValidatorDecisionExtraData,
@@ -36,7 +36,6 @@ export class NewBlockTransactions extends Struct({
     return Poseidon.hashPacked(NewBlockTransactions, this);
   }
 }
-const a = new NewBlockTransactions({ value: Field(1), count: Field(2) });
 
 export class Flags extends Struct({
   isValidated: Bool,
@@ -241,18 +240,22 @@ export class DomainNameContract extends TokenContract {
 
   @method async block(
     proof: ValidatorsVotingProof,
-    signature: Signature,
+    //signature: Signature,
     data: BlockData,
     verificationKey: VerificationKey
   ) {
     this.checkValidatorsDecision(proof);
     const tokenId = this.deriveTokenId();
+    const blockProducer = this.sender.getAndRequireSignature();
+    /*
     signature
       .verify(proof.publicInput.decision.address, BlockData.toFields(data))
       .assertEquals(true);
+    */
     proof.publicInput.decision.decision.assertEquals(
       ValidatorDecisionType.createBlock
     );
+    proof.publicInput.decision.address.assertEquals(blockProducer);
     const lastBlock = this.lastBlock.getAndRequireEquals();
     lastBlock.equals(PublicKey.empty()).assertEquals(Bool(false));
     const previousBlock = new BlockContract(lastBlock, tokenId);
@@ -264,7 +267,6 @@ export class DomainNameContract extends TokenContract {
     });
     const blockNumber = previousBlock.blockNumber.get().add(Field(1));
     blockNumber.assertEquals(data.blockNumber);
-
     const account = Account(data.address, tokenId);
     const tokenBalance = account.balance.getAndRequireEquals();
     tokenBalance.assertEquals(UInt64.from(0));
@@ -355,9 +357,11 @@ export class DomainNameContract extends TokenContract {
   }
 
   @method async proveBlock(proof: MapUpdateProof, blockAddress: PublicKey) {
-    const timestamp = this.network.timestamp.getAndRequireEquals();
+    // TODO: return back after o1js bug fix https://github.com/o1-labs/o1js/issues/1588
+    // and use this.network.timestamp.requireBetween()
+    //const timestamp = this.network.timestamp.getAndRequireEquals();
     //Provable.log("proveBlock time", timestamp);
-    timestamp.assertGreaterThan(proof.publicInput.time);
+    //timestamp.assertGreaterThan(proof.publicInput.time);
     proof.verify();
     const tokenId = this.deriveTokenId();
     const block = new BlockContract(blockAddress, tokenId);
@@ -394,10 +398,11 @@ export class DomainNameContract extends TokenContract {
 
   checkValidatorsDecision(proof: ValidatorsVotingProof) {
     // see https://discord.com/channels/484437221055922177/1215291691364524072
-    const id = getNetworkIdHash();
-    proof.publicInput.decision.chainId.assertEquals(id);
-    const timestamp = this.network.timestamp.getAndRequireEquals();
-    timestamp.assertLessThan(proof.publicInput.decision.expiry);
+    proof.publicInput.decision.chainId.assertEquals(Field(1));
+    // TODO: return back after o1js bug fix https://github.com/o1-labs/o1js/issues/1588
+    // and use this.network.timestamp.requireBetween()
+    //const timestamp = this.network.timestamp.getAndRequireEquals();
+    //timestamp.assertLessThan(proof.publicInput.decision.expiry);
     const validators = this.validators.getAndRequireEquals();
     const validatorsHash = this.validatorsHash.getAndRequireEquals();
     proof.verify();

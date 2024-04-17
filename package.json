@@ -20,7 +20,7 @@
     "axios": "^1.6.8",
     "o1js": "^0.18.0",
     "tslib": "^2.6.2",
-    "zkcloudworker": "^0.3.8"
+    "zkcloudworker": "^0.3.10"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
