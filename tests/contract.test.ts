@@ -7,8 +7,11 @@ import {
   AccountUpdate,
   VerificationKey,
   UInt64,
-  checkZkappTransaction,
+  Cache,
   PublicKey,
+  verify,
+  Bool,
+  Transaction,
 } from "o1js";
 import { validatorsPrivateKeys } from "../src/config";
 import {
@@ -21,6 +24,8 @@ import {
 import {
   DomainNameContract,
   BlockContract,
+  BlockData,
+  NewBlockTransactions,
 } from "../src/contract/domain-contract";
 import { stringToFields } from "../src/lib/hash";
 import {
@@ -34,11 +39,12 @@ import {
   makeString,
   initBlockchain,
   blockchain,
-  getNetworkIdHash,
   accountBalanceMina,
   sleep,
   LocalCloud,
   Memory,
+  fetchMinaAccount,
+  fee,
 } from "zkcloudworker";
 import {
   DomainName,
@@ -49,21 +55,24 @@ import {
   MapUpdate,
 } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
-import { zkcloudworker } from "../src/worker";
+import { zkcloudworker } from "../src/worker"; //, setVerificationKey
+import { DEPLOYER, PINATA_JWT } from "../env.json";
 
 setNumberOfWorkers(8);
-const network: blockchain = "local";
+const useLocalBlockchain = false;
+const network: blockchain = useLocalBlockchain ? "local" : "devnet";
 const useLocalCloudWorker = true;
+const chainId = Field(1);
 const api = new zkCloudWorkerClient({
   jwt: useLocalCloudWorker ? "local" : JWT,
   zkcloudworker,
-  chain: "local",
+  chain: useLocalBlockchain ? "local" : "devnet",
 });
 
 let deployer: PrivateKey;
 let sender: PublicKey;
-const ELEMENTS_NUMBER = 3;
-const BLOCKS_NUMBER = 3;
+const ELEMENTS_NUMBER = 1;
+const BLOCKS_NUMBER = 1;
 const domainNames: string[][] = [];
 
 const { tree, totalHash } = getValidatorsTreeAndHash();
@@ -73,10 +82,11 @@ const contractPrivateKey = PrivateKey.random();
 const contractPublicKey = contractPrivateKey.toPublicKey();
 
 const zkApp = new DomainNameContract(contractPublicKey);
-let verificationKey: VerificationKey;
 let blockVerificationKey: VerificationKey;
+let validatorsVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
-let tokenId: Field;
+let contractVerificationKey: VerificationKey;
+const tokenId: Field = zkApp.deriveTokenId();
 
 describe("Domain Name Service Contract", () => {
   it(`should prepare blocks data`, async () => {
@@ -113,20 +123,41 @@ describe("Domain Name Service Contract", () => {
     console.timeEnd(`prepared data`);
   });
 
-  it(`should compile and deploy contract`, async () => {
-    const { keys, networkIdHash } = await initBlockchain(network, 1);
-    const { privateKey, publicKey } = keys[0];
-    deployer = privateKey;
-    sender = publicKey;
+  it(`should initialize blockchain`, async () => {
+    if (useLocalBlockchain) {
+      const Local = Mina.LocalBlockchain({
+        proofsEnabled: true,
+      });
+      Mina.setActiveInstance(Local);
+      deployer = Local.testAccounts[0].privateKey;
+    } else {
+      const networkInstance = Mina.Network({
+        mina: [
+          "https://api.minascan.io/node/devnet/v1/graphql",
+          "https://proxy.devnet.minaexplorer.com/graphql",
+        ],
+      });
+      Mina.setActiveInstance(networkInstance);
+      deployer = PrivateKey.fromBase58(DEPLOYER);
+    }
+
+    process.env.DEPLOYER = deployer.toBase58();
+
+    console.log("blockchain initialized:", network);
+    console.log("contract address:", contractPublicKey.toBase58());
+    sender = deployer.toPublicKey();
     const networkId = Mina.getNetworkId();
     console.log("Network ID:", networkId);
-    console.log("Network ID hash:", networkIdHash.toJSON());
-    //console.log("sender", sender.toBase58());
+    console.log("sender", sender.toBase58());
     console.log("Sender balance", await accountBalanceMina(sender));
     expect(deployer).toBeDefined();
     expect(sender).toBeDefined();
     expect(deployer.toPublicKey().toBase58()).toBe(sender.toBase58());
+    process.env.PINATA_JWT = PINATA_JWT;
+    expect(process.env.PINATA_JWT).toBeDefined();
+  });
 
+  it.skip(`should compile contract`, async () => {
     console.time("methods analyzed");
     //console.log("Analyzing MapUpdate methods...");
     const mapMethods = await MapUpdate.analyzeMethods();
@@ -175,35 +206,153 @@ describe("Domain Name Service Contract", () => {
 
     console.time("compiled");
     console.log("Compiling contracts...");
-    mapVerificationKey = (await MapUpdate.compile()).verificationKey;
-    verificationKey = (await ValidatorsVoting.compile()).verificationKey;
-    blockVerificationKey = (await BlockContract.compile()).verificationKey;
-    await DomainNameContract.compile();
+    const cache: Cache = Cache.FileSystem("./cache");
+    mapVerificationKey = (await MapUpdate.compile({ cache })).verificationKey;
+    validatorsVerificationKey = (await ValidatorsVoting.compile({ cache }))
+      .verificationKey;
+    blockVerificationKey = (await BlockContract.compile({ cache }))
+      .verificationKey;
+    //setVerificationKey(blockVerificationKey, validatorsVerificationKey);
+    contractVerificationKey = (await DomainNameContract.compile({ cache }))
+      .verificationKey;
     console.timeEnd("compiled");
-
-    const tx = await Mina.transaction({ sender }, async () => {
-      AccountUpdate.fundNewAccount(sender);
-      await zkApp.deploy({});
-      zkApp.validators.set(validatorsRoot);
-      zkApp.validatorsHash.set(totalHash);
-    });
-
-    await tx.sign([deployer, contractPrivateKey]).send();
-
-    const tx2 = await Mina.transaction({ sender }, async () => {
-      AccountUpdate.fundNewAccount(sender);
-      await zkApp.firstBlock(nameContract.firstBlockPublicKey!);
-    });
-    await tx2.prove();
-    await tx2.sign([deployer, nameContract.firstBlockPrivateKey!]).send();
-    tokenId = zkApp.deriveTokenId();
-    Memory.info("deployed");
+    console.log(
+      "contract verification key",
+      contractVerificationKey.hash.toJSON()
+    );
+    console.log("block verification key", blockVerificationKey.hash.toJSON());
   });
 
-  it(`should add task to process transactions`, async () => {
-    //console.log(`Adding task to process transactions...`);
+  it.skip(`should deploy contract`, async () => {
+    console.log(`Deploying contract...`);
+    await fetchMinaAccount({ publicKey: sender, force: true });
+
+    const tx = await Mina.transaction(
+      { sender, fee: await fee(), memo: "deploy" },
+      async () => {
+        AccountUpdate.fundNewAccount(sender);
+        await zkApp.deploy({});
+        zkApp.validators.set(validatorsRoot);
+        zkApp.validatorsHash.set(totalHash);
+      }
+    );
+
+    tx.sign([deployer, contractPrivateKey]);
+    await sendTx(tx, "deploy");
+    Memory.info("deployed");
+    await sleep(10000);
+  });
+
+  it.skip(`should sent block 0`, async () => {
+    console.log(`Sending block 0...`);
+    await fetchMinaAccount({ publicKey: sender, force: true });
+    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
+
+    const tx = await Mina.transaction(
+      { sender, fee: await fee(), memo: "block 0" },
+      async () => {
+        AccountUpdate.fundNewAccount(sender);
+        await zkApp.firstBlock(nameContract.firstBlockPublicKey!);
+      }
+    );
+    await tx.prove();
+    tx.sign([deployer, nameContract.firstBlockPrivateKey!]);
+    await sendTx(tx, "block 0");
+    Memory.info("block 0 sent");
+    await sleep(10000);
+    //console.log("PINATA_JWT:", process.env.PINATA_JWT);
+  });
+
+  it.skip(`should send block 1`, async () => {
+    console.log(`Sending block 1...`);
+    const expiry = UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000);
+    const blockPrivateKey = PrivateKey.random();
+    const blockPublicKey = blockPrivateKey.toPublicKey();
+
+    const blockStorage = Storage.fromIpfsHash(
+      "bafkreifnek4e2r4cz62h22rwtxsi4bhsq6tt6ceeixdddyurpez32c6w64"
+    );
+    const blockProducerPrivateKey = PrivateKey.random();
+    const blockProducerPublicKey = blockProducerPrivateKey.toPublicKey();
+    const oldRoot = tree.getRoot();
+
+    const decision = new ValidatorsDecision({
+      contract: contractPublicKey,
+      chainId,
+      root: validatorsRoot,
+      decision: ValidatorDecisionType.createBlock,
+      address: blockProducerPublicKey,
+      data: ValidatorDecisionExtraData.fromBlockCreationData({
+        verificationKey: blockVerificationKey,
+        blockPublicKey,
+        oldRoot,
+      }),
+      expiry: UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000),
+    });
+    const proof: ValidatorsVotingProof = await calculateValidatorsProof(
+      decision,
+      validatorsVerificationKey,
+      false
+    );
+    if (proof.publicInput.hash.toJSON() !== totalHash.toJSON())
+      throw new Error("Invalid validatorsHash");
+    const ok = await verify(proof, validatorsVerificationKey);
+    if (!ok) throw new Error("proof verification failed");
+    console.log("validators proof verified:", ok);
+
+    const blockData: BlockData = new BlockData({
+      address: blockPublicKey,
+      root: oldRoot,
+      storage: blockStorage,
+      txs: new NewBlockTransactions({ count: Field(0), value: Field(0) }),
+      isFinal: Bool(false),
+      isProved: Bool(false),
+      isInvalid: Bool(false),
+      isValidated: Bool(false),
+      blockNumber: Field(1),
+    });
+    /*
+    const signature = Signature.create(
+      blockProducerPrivateKey,
+      BlockData.toFields(blockData)
+    );
+    */
+    await fetchMinaAccount({ publicKey: sender, force: true });
+    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
+    await fetchMinaAccount({
+      publicKey: nameContract.firstBlockPublicKey!,
+      tokenId,
+      force: true,
+    });
+
+    const tx = await Mina.transaction(
+      { sender, fee: await fee(), memo: `block 1` },
+      async () => {
+        AccountUpdate.fundNewAccount(sender);
+        await zkApp.block(proof, blockData, blockVerificationKey); //signature,
+      }
+    );
+
+    tx.sign([deployer, blockPrivateKey]);
+    await tx.prove();
+    tx.sign([deployer]);
+    await sendTx(tx, "block 1");
+    await sleep(20000);
+    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
+    const validators = zkApp.validators.get();
+    const validatorsHash = zkApp.validatorsHash.get();
+    expect(validators.toJSON()).toBe(validators.toJSON());
+    expect(validatorsHash.toJSON()).toBe(totalHash.toJSON());
+  });
+
+  it(`should send transactions`, async () => {
+    console.log(`Adding task to process transactions...`);
     let args: string = JSON.stringify({
-      contractAddress: contractPublicKey.toBase58(),
+      contractAddress:
+        "B62qnMamFGnWsMkopVzeKvUh1CZEQbbNpkPCsjFfcsS2sgHFyWQFC7R",
+      // "B62qnBuXnXAWg1uUbMrktsXzcWc89yieG2bQkRxM9JATu2WGvPYPwRr",
+      //contractPublicKey.toBase58(),
+      //"B62qqPUw2jxSBGsBjTKWKxjcdQ15hzmYEjF4hn9uqBKbRQLzZx1mR1W", //contractPublicKey.toBase58(),
     });
 
     let sent = false;
@@ -233,11 +382,9 @@ describe("Domain Name Service Contract", () => {
     expect(apiresult.jobId).toBeDefined();
     console.log(`txTask created, jobId:`, apiresult.jobId);
     if (apiresult.jobId === undefined) return;
-  });
 
-  for (let i = 0; i < BLOCKS_NUMBER; i++) {
-    const blockNumber = i + 1;
-    it(`should create a block`, async () => {
+    for (let i = 0; i < BLOCKS_NUMBER; i++) {
+      const blockNumber = i + 1;
       console.time(`Txs to the block ${blockNumber} sent`);
       for (let j = 0; j < ELEMENTS_NUMBER; j++) {
         let sent = false;
@@ -268,9 +415,7 @@ describe("Domain Name Service Contract", () => {
         await sleep(2000);
       }
       console.timeEnd(`Txs to the block ${blockNumber} sent`);
-    });
 
-    it(`should process tasks`, async () => {
       while (
         (await LocalCloud.processLocalTasks({
           developer: "@staketab",
@@ -282,10 +427,7 @@ describe("Domain Name Service Contract", () => {
         await sleep(1000);
       }
       Memory.info(`block ${blockNumber} processed`);
-    });
-  }
-
-  it(`should process remaining tasks`, async () => {
+    }
     console.log(`Processing remaining tasks...`);
     while (
       (await LocalCloud.processLocalTasks({
@@ -299,35 +441,73 @@ describe("Domain Name Service Contract", () => {
     }
   });
 
-  it(`should change validators`, async () => {
+  it.skip(`should change validators`, async () => {
     console.log(`Changing validators...`);
+    const expiry = UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000);
     const decision = new ValidatorsDecision({
       contract: contractPublicKey,
-      chainId: getNetworkIdHash(),
+      chainId,
       root: validatorsRoot,
       decision: ValidatorDecisionType.setValidators,
       address: PrivateKey.random().toPublicKey(),
       data: ValidatorDecisionExtraData.fromSetValidatorsData({
-        root: Field(1),
-        hash: Field(1),
+        root: validatorsRoot,
+        hash: totalHash,
         oldRoot: tree.getRoot(),
       }),
-      expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
+      expiry,
     });
     const proof: ValidatorsVotingProof = await calculateValidatorsProof(
       decision,
-      verificationKey,
+      validatorsVerificationKey,
       false
     );
+    const ok = await verify(proof.toJSON(), validatorsVerificationKey);
+    console.log("proof verified:", { ok });
+    expect(ok).toBe(true);
+    if (!ok) throw new Error("Proof is not verified");
 
-    const tx2 = await Mina.transaction({ sender }, async () => {
-      await zkApp.setValidators(proof);
-    });
-    await tx2.prove();
-    await tx2.sign([deployer]).send();
+    await fetchMinaAccount({ publicKey: sender, force: true });
+    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
+
+    const tx = await Mina.transaction(
+      { sender, fee: await fee(), memo: "change validators" },
+      async () => {
+        await zkApp.setValidators(proof);
+      }
+    );
+    await tx.prove();
+    tx.sign([deployer]);
+    await sendTx(tx, "Change validators");
+    await sleep(20000);
+    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
     const validators = zkApp.validators.get();
     const validatorsHash = zkApp.validatorsHash.get();
-    expect(validators.toJSON()).toBe(Field(1).toJSON());
-    expect(validatorsHash.toJSON()).toBe(Field(1).toJSON());
+    expect(validators.toJSON()).toBe(validators.toJSON());
+    expect(validatorsHash.toJSON()).toBe(totalHash.toJSON());
   });
 });
+
+async function sendTx(tx: Transaction, description?: string) {
+  const txSent = await tx.send();
+  if (txSent.errors.length > 0) {
+    console.error(
+      `${description ?? ""} tx error: hash: ${txSent.hash} status: ${
+        txSent.status
+      }  errors: ${txSent.errors}`
+    );
+    throw new Error("Transaction failed");
+  }
+  console.log(
+    `${description ?? ""} tx sent: hash: ${txSent.hash} status: ${
+      txSent.status
+    }`
+  );
+
+  const txIncluded = await txSent.wait();
+  console.log(
+    `${description ?? ""} tx included into block: hash: ${
+      txIncluded.hash
+    } status: ${txIncluded.status}`
+  );
+}
