@@ -5,6 +5,7 @@ import {
   DeployedSmartContract,
   fetchMinaAccount,
   sleep,
+  getNetworkIdHash,
 } from "zkcloudworker";
 import os from "os";
 import assert from "node:assert/strict";
@@ -14,7 +15,6 @@ import {
   VerificationKey,
   Field,
   PublicKey,
-  Signature,
   Mina,
   PrivateKey,
   AccountUpdate,
@@ -32,7 +32,6 @@ import { Storage } from "./contract/storage";
 import { deserializeFields } from "./lib/fields";
 import {
   ValidatorsDecision,
-  ValidatorDecisionExtraData,
   ValidatorsVoting,
   ValidatorsVotingProof,
   ValidatorDecisionType,
@@ -41,7 +40,10 @@ import {
   DomainNameContract,
   BlockContract,
   BlockData,
-  Flags,
+  BlockParams,
+  BlockCreationData,
+  BlockValidationData,
+  BadBlockValidationData,
 } from "./contract/domain-contract";
 import { calculateValidatorsProof } from "./rollup/validators-proof";
 import { createBlock } from "./rollup/blocks";
@@ -52,7 +54,6 @@ import { saveToIPFS, loadFromIPFS } from "./contract/storage";
 import { blockProducer } from "./config";
 
 const fullValidation = true;
-const chainId = Field(1);
 const waitTx = false;
 
 export class DomainNameServiceWorker extends zkCloudWorker {
@@ -311,7 +312,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       return undefined;
     }
     const block = new BlockContract(blockAddress, tokenId);
-    const flags = Flags.fromField(block.flags.get());
+    const flags = BlockParams.unpack(block.blockParams.get());
     if (flags.isValidated.toBoolean() === false) {
       console.log(`Block ${blockNumber} is not yet validated`);
       console.timeEnd("proveBlock");
@@ -401,8 +402,9 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const blockAddress = PublicKey.fromBase58(args.blockAddress);
     const zkApp = new DomainNameContract(contractAddress);
     const tokenId = zkApp.deriveTokenId();
-    const validatorsRoot = zkApp.validators.get();
-    const validatorsHash = zkApp.validatorsHash.get();
+    await fetchMinaAccount({ publicKey: contractAddress, force: true });
+    const validators = zkApp.validators.get();
+
     let blockNumber = 0;
     try {
       await fetchMinaAccount({
@@ -415,7 +417,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         console.timeEnd(`block ${args.blockNumber} validated`);
         return undefined;
       }
-      await fetchMinaAccount({ publicKey: contractAddress, force: true });
+
       const block = new BlockContract(blockAddress, tokenId);
       const previousBlockAddress = block.previousBlock.get();
       await fetchMinaAccount({
@@ -470,24 +472,32 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       const root = block.root.get();
       if (root.toJSON() !== map.getRoot().toJSON())
         throw new Error("Invalid block root");
-      const storage = block.storage.get();
-      const txs = block.txs.get();
+
+      const blockParams = BlockParams.unpack(block.blockParams.get());
+      const time = blockParams.timeCreated;
 
       const {
         root: calculatedRoot,
-        txs: calculatedTxs,
+        txsHash: calculatedTxsHash,
+        txsCount: calculatedTxsCount,
         proofData: calculatedProofData,
       } = createBlock({
         elements: transactionData,
         map: oldMap,
+        time,
         database,
         calculateTransactions: true,
       });
       proofData = calculatedProofData;
+      const storage = block.storage.get();
+      const txsHash = block.txsHash.get();
+
       if (calculatedRoot.toJSON() !== root.toJSON())
         throw new Error("Invalid block root");
-      if (calculatedTxs.hash().toJSON() !== txs.toJSON())
+      if (calculatedTxsHash.toJSON() !== txsHash.toJSON())
         throw new Error("Invalid block transactions");
+      if (calculatedTxsCount.toBigint() !== blockParams.txsCount.toBigint())
+        throw new Error("Invalid block transactions count");
       const loadedDatabase = new DomainDatabase(json.database);
       assert.deepStrictEqual(database.data, loadedDatabase.data);
       if (root.toJSON() !== database.getRoot().toJSON())
@@ -495,16 +505,28 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       if (root.toJSON() !== loadedDatabase.getRoot().toJSON())
         throw new Error("Invalid block root");
       //console.log(`Block ${blockNumber} is valid`);
+
+      await this.compile();
+      if (
+        DomainNameServiceWorker.mapUpdateVerificationKey === undefined ||
+        DomainNameServiceWorker.blockContractVerificationKey === undefined ||
+        DomainNameServiceWorker.validatorsVerificationKey === undefined ||
+        DomainNameServiceWorker.contractVerificationKey === undefined
+      )
+        throw new Error("verificationKey is undefined");
+
       decision = new ValidatorsDecision({
-        contract: contractAddress,
-        chainId,
-        root: validatorsRoot,
-        decision: ValidatorDecisionType.validate,
-        address: blockAddress,
-        data: ValidatorDecisionExtraData.fromBlockValidationData({
+        contractAddress,
+        chainId: getNetworkIdHash(),
+        validatorsRoot: validators.root,
+        decisionType: ValidatorDecisionType.validate,
+        data: BlockValidationData.toFields({
           storage,
-          txs,
           root,
+          txsHash,
+          txsCount: calculatedTxsCount,
+          blockAddress,
+          notUsed: Field(0),
         }),
         expiry: UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000),
       });
@@ -512,18 +534,19 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       console.error("Error in validateBlock", error);
       validated = false;
       decision = new ValidatorsDecision({
-        contract: contractAddress,
-        chainId,
-        root: validatorsRoot,
-        decision: ValidatorDecisionType.badBlock,
-        address: blockAddress,
-        data: ValidatorDecisionExtraData.empty(),
+        contractAddress,
+        chainId: getNetworkIdHash(),
+        validatorsRoot: validators.root,
+        decisionType: ValidatorDecisionType.badBlock,
+        data: BadBlockValidationData.toFields({
+          blockAddress,
+          notUsed: [Field(0), Field(0), Field(0), Field(0), Field(0), Field(0)],
+        }),
         expiry: UInt64.from(Date.now() + 1000 * 60 * 60),
       });
     }
 
     if (decision === undefined) throw new Error("decision is undefined");
-
     await this.compile();
     if (
       DomainNameServiceWorker.mapUpdateVerificationKey === undefined ||
@@ -532,20 +555,15 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       DomainNameServiceWorker.contractVerificationKey === undefined
     )
       throw new Error("verificationKey is undefined");
-    const validatorsVerificationKey: VerificationKey =
-      DomainNameServiceWorker.validatorsVerificationKey;
 
     const proof: ValidatorsVotingProof = await calculateValidatorsProof(
       decision,
-      validatorsVerificationKey,
+      DomainNameServiceWorker.validatorsVerificationKey,
       false
     );
 
-    if (
-      validatorsHash !== undefined &&
-      proof.publicInput.hash.toJSON() !== validatorsHash.toJSON()
-    )
-      throw new Error("Invalid validatorsHash");
+    if (proof.publicInput.hash.toJSON() !== validators.hash.toJSON())
+      throw new Error("Invalid validators hash in proof");
 
     const deployer = await this.cloud.getDeployer();
     if (deployer === undefined) throw new Error("deployer is undefined");
@@ -638,7 +656,8 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const zkApp = new DomainNameContract(contractAddress);
     const tokenId = zkApp.deriveTokenId();
     await fetchMinaAccount({ publicKey: contractAddress, force: true });
-    const previousBlockAddress = zkApp.lastBlock.get();
+    const validators = zkApp.validators.get();
+    const previousBlockAddress = zkApp.lastBlockAddress.get();
     console.log("previousBlockAddress", previousBlockAddress.toBase58());
     const previousBlock = new BlockContract(previousBlockAddress, tokenId);
     await fetchMinaAccount({
@@ -648,10 +667,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     });
     const blockNumber = Number(previousBlock.blockNumber.get().toBigInt()) + 1;
     console.log(`Creating block ${blockNumber}...`);
-    const validatorsRoot = zkApp.validators.get();
-    const validatorsHash = zkApp.validatorsHash.get();
-    console.log("validatorsRoot", validatorsRoot.toJSON());
-    console.log("validatorsHash", validatorsHash.toJSON());
+
     let database: DomainDatabase = new DomainDatabase();
     let map = new MerkleMap();
     const previousBlockRoot = previousBlock.root.get();
@@ -675,11 +691,13 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         throw new Error("Invalid previous block");
     }
 
-    const { root, oldRoot, txs } = createBlock({
+    const time = UInt64.from(Date.now());
+    const { root, oldRoot, txsHash, txsCount } = createBlock({
       elements: transactions.map((tx) =>
         DomainTransactionData.fromJSON(JSON.parse(tx))
       ),
       map,
+      time,
       database,
     });
 
@@ -744,15 +762,17 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       DomainNameServiceWorker.validatorsVerificationKey;
 
     const decision = new ValidatorsDecision({
-      contract: contractAddress,
-      chainId,
-      root: validatorsRoot,
-      decision: ValidatorDecisionType.createBlock,
-      address: blockProducer.publicKey,
-      data: ValidatorDecisionExtraData.fromBlockCreationData({
-        verificationKey: blockVerificationKey,
-        blockPublicKey,
+      contractAddress,
+      chainId: getNetworkIdHash(),
+      validatorsRoot: validators.root,
+      decisionType: ValidatorDecisionType.createBlock,
+      data: BlockCreationData.toFields({
         oldRoot,
+        blockAddress: blockPublicKey,
+        blockProducer: blockProducer.publicKey,
+        previousBlockAddress,
+        verificationKeyHash:
+          DomainNameServiceWorker.blockContractVerificationKey.hash,
       }),
       expiry: UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000),
     });
@@ -761,22 +781,27 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       validatorsVerificationKey,
       false
     );
-    if (proof.publicInput.hash.toJSON() !== validatorsHash.toJSON())
+    if (proof.publicInput.hash.toJSON() !== validators.hash.toJSON())
       throw new Error("Invalid validatorsHash");
     const ok = await verify(proof, validatorsVerificationKey);
     if (!ok) throw new Error("proof verification failed");
     console.log("validators proof verified:", ok);
 
     const blockData: BlockData = new BlockData({
-      address: blockPublicKey,
+      blockAddress: blockPublicKey,
       root,
       storage: blockStorage,
-      txs,
-      isFinal: Bool(false),
-      isProved: Bool(false),
-      isInvalid: Bool(false),
-      isValidated: Bool(false),
-      blockNumber: Field(blockNumber),
+      txsHash,
+      blockNumber: UInt64.from(blockNumber),
+      blockParams: new BlockParams({
+        txsCount,
+        timeCreated: UInt64.from(Date.now()),
+        isFinal: Bool(false),
+        isProved: Bool(false),
+        isInvalid: Bool(false),
+        isValidated: Bool(false),
+      }).pack(),
+      previousBlockAddress: previousBlockAddress,
     });
 
     await fetchMinaAccount({ publicKey: blockProducer.publicKey, force: true });

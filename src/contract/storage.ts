@@ -1,4 +1,4 @@
-import { Struct, Field, Encoding } from "o1js";
+import { Struct, Field, Encoding, Provable } from "o1js";
 import axios from "axios";
 import { makeString } from "zkcloudworker";
 
@@ -9,7 +9,7 @@ import { makeString } from "zkcloudworker";
  * @property hashString The hash string of the storage
  */
 export class Storage extends Struct({
-  hashString: [Field, Field],
+  hashString: Provable.Array(Field, 2),
 }) {
   constructor(value: { hashString: [Field, Field] }) {
     super(value);

@@ -9,124 +9,129 @@ import {
   Struct,
   PublicKey,
   Bool,
-  Signature,
   Account,
   TokenContract,
   AccountUpdateForest,
   UInt64,
   AccountUpdate,
   VerificationKey,
-  Poseidon,
   MerkleMap,
+  UInt32,
   Provable,
 } from "o1js";
 import { Storage } from "./storage";
 import {
-  ValidatorDecisionExtraData,
   ValidatorDecisionType,
   ValidatorsVotingProof,
 } from "../rollup/validators";
 import { MapUpdateProof, MapTransition } from "../rollup/transaction";
+import { getNetworkIdHash } from "zkcloudworker";
 
-export class NewBlockTransactions extends Struct({
-  value: Field, // sum of the hashes of all transactions
-  count: Field, // number of transactions
-}) {
-  hash() {
-    return Poseidon.hashPacked(NewBlockTransactions, this);
-  }
-}
-
-export class Flags extends Struct({
+export class BlockParams extends Struct({
+  txsCount: UInt32,
+  timeCreated: UInt64,
   isValidated: Bool,
-  isProved: Bool,
   isFinal: Bool,
+  isProved: Bool,
   isInvalid: Bool,
 }) {
-  toField(): Field {
+  pack(): Field {
+    const txsCount = this.txsCount.value.toBits(32);
+    const timeCreated = this.timeCreated.value.toBits(64);
     return Field.fromBits([
+      ...txsCount,
+      ...timeCreated,
       this.isValidated,
-      this.isProved,
       this.isFinal,
+      this.isProved,
       this.isInvalid,
     ]);
   }
-  static fromField(f: Field) {
-    const bits = f.toBits(4);
-    return new Flags({
-      isValidated: bits[0],
-      isProved: bits[1],
-      isFinal: bits[2],
-      isInvalid: bits[3],
+  static unpack(packed: Field) {
+    const bits = packed.toBits(32 + 64 + 4);
+    const txsCount = UInt32.from(0);
+    const timeCreated = UInt64.from(0);
+    txsCount.value = Field.fromBits(bits.slice(0, 32));
+    timeCreated.value = Field.fromBits(bits.slice(32, 96));
+    return new BlockParams({
+      txsCount,
+      timeCreated,
+      isValidated: bits[96],
+      isFinal: bits[97],
+      isProved: bits[98],
+      isInvalid: bits[99],
     });
   }
 }
-export class BlockData extends Struct({
-  root: Field,
-  txs: NewBlockTransactions,
+
+export class BlockCreationData extends Struct({
+  oldRoot: Field,
+  verificationKeyHash: Field,
+  blockAddress: PublicKey,
+  blockProducer: PublicKey,
+  previousBlockAddress: PublicKey,
+}) {}
+
+export class BlockValidationData extends Struct({
   storage: Storage,
-  address: PublicKey,
-  blockNumber: Field,
-  isValidated: Bool,
-  isFinal: Bool,
-  isProved: Bool,
-  isInvalid: Bool,
+  root: Field,
+  txsHash: Field,
+  txsCount: UInt32,
+  blockAddress: PublicKey,
+  notUsed: Field,
+}) {}
+
+export class BadBlockValidationData extends Struct({
+  blockAddress: PublicKey,
+  notUsed: Provable.Array(Field, 6),
+}) {}
+
+export class ValidatorsState extends Struct({
+  root: Field,
+  hash: Field,
+  count: UInt32,
 }) {
-  toState(previousBlock: PublicKey): Field[] {
+  static assertEquals(a: ValidatorsState, b: ValidatorsState) {
+    a.root.assertEquals(b.root);
+    a.hash.assertEquals(b.hash);
+    a.count.assertEquals(b.count);
+  }
+}
+
+export class ChangeValidatorsData extends Struct({
+  new: ValidatorsState,
+  old: ValidatorsState,
+  storage: Storage,
+}) {}
+
+export class BlockData extends Struct({
+  blockNumber: UInt64,
+  root: Field,
+  storage: Storage,
+  previousBlockAddress: PublicKey,
+  txsHash: Field,
+  blockParams: Field,
+  blockAddress: PublicKey,
+}) {
+  toState(): Field[] {
     return [
+      this.blockNumber.value,
       this.root,
-      this.txs.hash(),
-      ...previousBlock.toFields(),
-      ...Storage.toFields(this.storage),
-      new Flags({
-        isValidated: this.isValidated,
-        isProved: this.isProved,
-        isFinal: this.isFinal,
-        isInvalid: this.isInvalid,
-      }).toField(),
-      this.blockNumber,
+      ...this.storage.hashString,
+      ...this.previousBlockAddress.toFields(),
+      this.txsHash,
+      this.blockParams,
     ];
   }
 }
-export class NewBlockEvent extends Struct({
-  root: Field,
-  address: PublicKey,
-  storage: Storage,
-  txs: NewBlockTransactions,
-  previousBlock: PublicKey,
-}) {}
-
-export class ValidatedBlockEvent extends Struct({
-  root: Field,
-  address: PublicKey,
-  storage: Storage,
-}) {}
-
-export class ProvedBlockEvent extends Struct({
-  root: Field,
-  address: PublicKey,
-  storage: Storage,
-}) {}
-
-export class SetValidatorsEvent extends Struct({
-  root: Field,
-  address: PublicKey,
-  storage: Storage,
-}) {}
-
-export class FirstBlockEvent extends Struct({
-  root: Field,
-  address: PublicKey,
-}) {}
 
 export class BlockContract extends SmartContract {
+  @state(UInt64) blockNumber = State<UInt64>();
   @state(Field) root = State<Field>();
-  @state(Field) txs = State<Field>();
-  @state(PublicKey) previousBlock = State<PublicKey>();
   @state(Storage) storage = State<Storage>();
-  @state(Field) flags = State<Field>();
-  @state(Field) blockNumber = State<Field>();
-  // TODO: pack Bool vars into one Field and add block number, add more statuses
+  @state(PublicKey) previousBlock = State<PublicKey>();
+  @state(Field) txsHash = State<Field>();
+  @state(Field) blockParams = State<Field>();
 
   async deploy(args: DeployArgs) {
     super.deploy(args);
@@ -136,28 +141,32 @@ export class BlockContract extends SmartContract {
     });
   }
 
-  @method async validateBlock(
-    data: ValidatorDecisionExtraData,
-    tokenId: Field
-  ) {
-    data.verifyBlockValidationData({
-      hash: this.txs.getAndRequireEquals(),
-      storage: this.storage.getAndRequireEquals(),
-      root: this.root.getAndRequireEquals(),
-    });
+  @method async validateBlock(data: BlockValidationData, tokenId: Field) {
+    const params = BlockParams.unpack(this.blockParams.getAndRequireEquals());
+    params.isValidated.assertEquals(Bool(false));
+    params.isFinal.assertEquals(Bool(false));
+    params.isProved.assertEquals(Bool(false));
+    params.isInvalid.assertEquals(Bool(false));
+
+    params.txsCount.assertEquals(data.txsCount);
+    Storage.assertEquals(data.storage, this.storage.getAndRequireEquals());
+    data.txsHash.assertEquals(this.txsHash.getAndRequireEquals());
+    data.root.assertEquals(this.root.getAndRequireEquals());
+
     const previousBlockContract = new BlockContract(
       this.previousBlock.getAndRequireEquals(),
       tokenId
     );
     // TODO: add error messages for all assertions
-    const previousFlags = Flags.fromField(previousBlockContract.flags.get()); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
-    const isValidatedOrFinal = previousFlags.isValidated.or(
-      previousFlags.isFinal
+    // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+    const previousBlockParams = BlockParams.unpack(
+      previousBlockContract.blockParams.get()
     );
-    isValidatedOrFinal.assertEquals(Bool(true));
-    const flags = Flags.fromField(this.flags.getAndRequireEquals());
-    flags.isValidated = Bool(true);
-    this.flags.set(flags.toField());
+    previousBlockParams.isValidated
+      .or(previousBlockParams.isFinal)
+      .assertTrue();
+    params.isValidated = Bool(true);
+    this.blockParams.set(params.pack());
   }
 
   @method async badBlock(tokenId: Field) {
@@ -165,21 +174,25 @@ export class BlockContract extends SmartContract {
       this.previousBlock.getAndRequireEquals(),
       tokenId
     );
-    const previousFlags = Flags.fromField(previousBlockContract.flags.get()); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
-    previousFlags.isFinal.assertEquals(Bool(true));
+    const previousBlockParams = BlockParams.unpack(
+      // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+      previousBlockContract.blockParams.get()
+    );
+    previousBlockParams.isFinal.assertTrue();
+    // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
     const root = previousBlockContract.root.get();
-    const flags = Flags.fromField(this.flags.getAndRequireEquals());
-    flags.isValidated = Bool(false);
-    flags.isInvalid = Bool(true);
-    flags.isFinal = Bool(true);
-    this.flags.set(flags.toField());
+    const params = BlockParams.unpack(this.blockParams.getAndRequireEquals());
+    params.isValidated = Bool(false);
+    params.isInvalid = Bool(true);
+    params.isFinal = Bool(true);
+    this.blockParams.set(params.pack());
     this.root.set(root);
   }
 
   @method async proveBlock(data: MapTransition, tokenId: Field) {
-    const flags = Flags.fromField(this.flags.getAndRequireEquals());
-    flags.isFinal.assertEquals(Bool(false));
-    flags.isValidated.assertEquals(Bool(true)); // We need to make sure that IPFS data is available and correct
+    const params = BlockParams.unpack(this.blockParams.getAndRequireEquals());
+    params.isFinal.assertFalse();
+    params.isValidated.assertTrue(); // We need to make sure that IPFS data is available and correct
 
     const previousBlockContract = new BlockContract(
       this.previousBlock.getAndRequireEquals(),
@@ -188,26 +201,24 @@ export class BlockContract extends SmartContract {
     const oldRoot = previousBlockContract.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
     oldRoot.assertEquals(data.oldRoot);
     data.newRoot.assertEquals(this.root.getAndRequireEquals());
-    const previousFlags = Flags.fromField(previousBlockContract.flags.get()); // TODO: change to getAndRequireEquals() after o1js bug fix
-    previousFlags.isFinal.assertEquals(Bool(true));
-    const txs: NewBlockTransactions = new NewBlockTransactions({
-      value: data.hash,
-      count: data.count,
-    });
-    txs.hash().assertEquals(this.txs.getAndRequireEquals());
-    flags.isProved = Bool(true);
-    flags.isFinal = Bool(true);
-    this.flags.set(flags.toField());
+    const previousBlockParams = BlockParams.unpack(
+      // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
+      previousBlockContract.blockParams.get()
+    );
+    previousBlockParams.isFinal.assertTrue();
+    data.hash.assertEquals(this.txsHash.getAndRequireEquals());
+    data.count.assertEquals(params.txsCount);
+    params.isProved = Bool(true);
+    params.isFinal = Bool(true);
+    this.blockParams.set(params.pack());
   }
 }
 
 export class DomainNameContract extends TokenContract {
   @state(Field) domain = State<Field>();
-  @state(Field) validators = State<Field>();
-  @state(Field) validatorsHash = State<Field>();
-  @state(Field) validatorsRequired = State<Field>();
-  @state(PublicKey) lastBlock = State<PublicKey>();
-  @state(PublicKey) lastProvedBlock = State<PublicKey>();
+  @state(ValidatorsState) validators = State<ValidatorsState>();
+  @state(PublicKey) lastBlockAddress = State<PublicKey>();
+  @state(PublicKey) lastProvedBlockAddress = State<PublicKey>();
 
   async deploy(args: DeployArgs) {
     super.deploy(args);
@@ -219,8 +230,8 @@ export class DomainNameContract extends TokenContract {
 
   init() {
     super.init();
-    this.lastBlock.set(PublicKey.empty());
-    this.lastProvedBlock.set(PublicKey.empty());
+    this.lastBlockAddress.set(PublicKey.empty());
+    this.lastProvedBlockAddress.set(PublicKey.empty());
   }
 
   async approveBase(forest: AccountUpdateForest) {
@@ -231,50 +242,51 @@ export class DomainNameContract extends TokenContract {
   }
 
   events = {
-    firstBlock: FirstBlockEvent,
-    newBlock: NewBlockEvent,
-    validatedBlock: ValidatedBlockEvent,
-    provedBlock: ProvedBlockEvent,
-    setValidators: SetValidatorsEvent,
+    newBlock: BlockData,
+    validatedBlock: PublicKey,
+    provedBlock: PublicKey,
+    setValidators: ChangeValidatorsData,
   };
 
   @method async block(
     proof: ValidatorsVotingProof,
-    //signature: Signature,
     data: BlockData,
     verificationKey: VerificationKey
   ) {
     this.checkValidatorsDecision(proof);
     const tokenId = this.deriveTokenId();
     const blockProducer = this.sender.getAndRequireSignature();
-    /*
-    signature
-      .verify(proof.publicInput.decision.address, BlockData.toFields(data))
-      .assertEquals(true);
-    */
-    proof.publicInput.decision.decision.assertEquals(
+    proof.publicInput.decision.decisionType.assertEquals(
       ValidatorDecisionType.createBlock
     );
-    proof.publicInput.decision.address.assertEquals(blockProducer);
-    const lastBlock = this.lastBlock.getAndRequireEquals();
+    const decision = BlockCreationData.fromFields(
+      proof.publicInput.decision.data
+    );
+    decision.verificationKeyHash.assertEquals(verificationKey.hash);
+    decision.blockAddress.assertEquals(data.blockAddress);
+    decision.blockProducer.assertEquals(blockProducer);
+    decision.previousBlockAddress.assertEquals(data.previousBlockAddress);
+    const lastBlock = this.lastBlockAddress.getAndRequireEquals();
     lastBlock.equals(PublicKey.empty()).assertEquals(Bool(false));
+    data.previousBlockAddress.assertEquals(lastBlock);
     const previousBlock = new BlockContract(lastBlock, tokenId);
     const oldRoot = previousBlock.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
-    proof.publicInput.decision.data.verifyBlockCreationData({
-      verificationKey,
-      blockPublicKey: data.address,
-      oldRoot,
-    });
-    const blockNumber = previousBlock.blockNumber.get().add(Field(1));
+    decision.oldRoot.assertEquals(oldRoot);
+    const blockNumber = previousBlock.blockNumber.get().add(UInt64.from(1));
     blockNumber.assertEquals(data.blockNumber);
-    const account = Account(data.address, tokenId);
+    const previousBlockParams = BlockParams.unpack(
+      previousBlock.blockParams.get()
+    );
+    const blockParams = BlockParams.unpack(data.blockParams);
+    previousBlockParams.timeCreated.assertLessThan(blockParams.timeCreated);
+    const account = Account(data.blockAddress, tokenId);
     const tokenBalance = account.balance.getAndRequireEquals();
     tokenBalance.assertEquals(UInt64.from(0));
     this.internal.mint({
-      address: data.address,
+      address: data.blockAddress,
       amount: 1_000_000_000,
     });
-    const update = AccountUpdate.createSigned(data.address, tokenId);
+    const update = AccountUpdate.createSigned(data.blockAddress, tokenId);
     update.body.update.verificationKey = {
       isSome: Bool(true),
       value: verificationKey,
@@ -286,7 +298,7 @@ export class DomainNameContract extends TokenContract {
         editState: Permissions.proof(),
       },
     };
-    const state = data.toState(lastBlock);
+    const state = data.toState();
     update.body.update.appState = [
       { isSome: Bool(true), value: state[0] },
       { isSome: Bool(true), value: state[1] },
@@ -297,63 +309,66 @@ export class DomainNameContract extends TokenContract {
       { isSome: Bool(true), value: state[6] },
       { isSome: Bool(true), value: state[7] },
     ];
-    const blockEvent = new NewBlockEvent({
-      root: data.root,
-      address: data.address,
-      storage: data.storage,
-      txs: data.txs,
-      previousBlock: lastBlock,
-    });
-    this.emitEvent("newBlock", blockEvent);
-    this.lastBlock.set(data.address);
+    this.emitEvent("newBlock", data);
+    this.lastBlockAddress.set(data.blockAddress);
   }
 
-  @method async firstBlock(publicKey: PublicKey) {
-    const lastBlock = this.lastBlock.getAndRequireEquals();
-    lastBlock.equals(PublicKey.empty()).assertEquals(Bool(true));
+  @method async blockZero(publicKey: PublicKey, timeCreated: UInt64) {
+    // TODO: check timeCreated
+    this.lastBlockAddress
+      .getAndRequireEquals()
+      .equals(PublicKey.empty())
+      .assertTrue();
     const tokenId = this.deriveTokenId();
     this.internal.mint({
       address: publicKey,
       amount: 1_000_000_000,
     });
-    const root = new MerkleMap().getRoot();
     const update = AccountUpdate.createSigned(publicKey, tokenId);
+    const data: BlockData = new BlockData({
+      blockNumber: UInt64.from(0),
+      root: new MerkleMap().getRoot(),
+      storage: Storage.empty(),
+      previousBlockAddress: PublicKey.empty(),
+      txsHash: Field(0),
+      blockParams: new BlockParams({
+        txsCount: UInt32.from(0),
+        timeCreated,
+        isValidated: Bool(true),
+        isFinal: Bool(true),
+        isProved: Bool(true),
+        isInvalid: Bool(false),
+      }).pack(),
+      blockAddress: publicKey,
+    });
+    const state = data.toState();
     update.body.update.appState = [
-      { isSome: Bool(true), value: root },
-      { isSome: Bool(true), value: Field(0) },
-      { isSome: Bool(true), value: Field(0) },
-      { isSome: Bool(true), value: Field(0) },
-      { isSome: Bool(true), value: Field(0) },
-      { isSome: Bool(true), value: Field(0) },
-      {
-        isSome: Bool(true),
-        value: new Flags({
-          isValidated: Bool(true),
-          isProved: Bool(true),
-          isFinal: Bool(true),
-          isInvalid: Bool(false),
-        }).toField(),
-      },
-      { isSome: Bool(true), value: Field(0) },
+      { isSome: Bool(true), value: state[0] },
+      { isSome: Bool(true), value: state[1] },
+      { isSome: Bool(true), value: state[2] },
+      { isSome: Bool(true), value: state[3] },
+      { isSome: Bool(true), value: state[4] },
+      { isSome: Bool(true), value: state[5] },
+      { isSome: Bool(true), value: state[6] },
+      { isSome: Bool(true), value: state[7] },
     ];
-    this.lastBlock.set(publicKey);
-    this.emitEvent(
-      "firstBlock",
-      new FirstBlockEvent({ root, address: publicKey })
-    );
+    this.lastBlockAddress.set(publicKey);
+    this.lastProvedBlockAddress.set(publicKey);
+    this.emitEvent("newBlock", data);
   }
 
   @method async validateBlock(proof: ValidatorsVotingProof) {
     this.checkValidatorsDecision(proof);
-    proof.publicInput.decision.decision.assertEquals(
+    proof.publicInput.decision.decisionType.assertEquals(
       ValidatorDecisionType.validate
     );
     const tokenId = this.deriveTokenId();
-    const block = new BlockContract(
-      proof.publicInput.decision.address,
-      tokenId
+    const data = BlockValidationData.fromFields(
+      proof.publicInput.decision.data
     );
-    await block.validateBlock(proof.publicInput.decision.data, tokenId);
+    const block = new BlockContract(data.blockAddress, tokenId);
+    await block.validateBlock(data, tokenId);
+    this.emitEvent("validatedBlock", data.blockAddress);
   }
 
   @method async proveBlock(proof: MapUpdateProof, blockAddress: PublicKey) {
@@ -366,50 +381,49 @@ export class DomainNameContract extends TokenContract {
     const tokenId = this.deriveTokenId();
     const block = new BlockContract(blockAddress, tokenId);
     await block.proveBlock(proof.publicInput, tokenId);
-    this.lastProvedBlock.set(blockAddress);
+    this.lastProvedBlockAddress.set(blockAddress);
   }
 
   @method async badBlock(proof: ValidatorsVotingProof) {
     this.checkValidatorsDecision(proof);
-    proof.publicInput.decision.decision.assertEquals(
+    proof.publicInput.decision.decisionType.assertEquals(
       ValidatorDecisionType.badBlock
     );
-    const tokenId = this.deriveTokenId();
-    const block = new BlockContract(
-      proof.publicInput.decision.address,
-      tokenId
+    const data: BadBlockValidationData = BadBlockValidationData.fromFields(
+      proof.publicInput.decision.data
     );
+    const tokenId = this.deriveTokenId();
+    const block = new BlockContract(data.blockAddress, tokenId);
     await block.badBlock(tokenId);
   }
 
   @method async setValidators(proof: ValidatorsVotingProof) {
     this.checkValidatorsDecision(proof);
-    proof.publicInput.decision.decision.assertEquals(
+    proof.publicInput.decision.decisionType.assertEquals(
       ValidatorDecisionType.setValidators
     );
-    const oldRoot = this.validators.getAndRequireEquals();
-    const { root, hash } =
-      proof.publicInput.decision.data.verifySetValidatorsData({ oldRoot });
-    const validatorsRequired = this.validatorsRequired.getAndRequireEquals();
-    proof.publicInput.count.assertGreaterThan(validatorsRequired.mul(Field(2)));
-    this.validators.set(root);
-    this.validatorsHash.set(hash);
+    const old = this.validators.getAndRequireEquals();
+    const data = ChangeValidatorsData.fromFields(
+      proof.publicInput.decision.data
+    );
+    ValidatorsState.assertEquals(data.old, old);
+    proof.publicInput.count.assertGreaterThan(old.count.mul(UInt32.from(2)));
+    this.validators.set(data.new);
+    this.emitEvent("setValidators", data);
   }
 
   checkValidatorsDecision(proof: ValidatorsVotingProof) {
     // see https://discord.com/channels/484437221055922177/1215291691364524072
-    proof.publicInput.decision.chainId.assertEquals(Field(1));
+    proof.publicInput.decision.chainId.assertEquals(getNetworkIdHash());
     // TODO: return back after o1js bug fix https://github.com/o1-labs/o1js/issues/1588
     // and use this.network.timestamp.requireBetween()
     //const timestamp = this.network.timestamp.getAndRequireEquals();
     //timestamp.assertLessThan(proof.publicInput.decision.expiry);
     const validators = this.validators.getAndRequireEquals();
-    const validatorsHash = this.validatorsHash.getAndRequireEquals();
     proof.verify();
-    proof.publicInput.hash.assertEquals(validatorsHash);
-    proof.publicInput.decision.root.assertEquals(validators);
-    const validatorsRequired = this.validatorsRequired.getAndRequireEquals();
-    proof.publicInput.count.assertGreaterThan(validatorsRequired);
-    proof.publicInput.decision.contract.assertEquals(this.address);
+    proof.publicInput.hash.assertEquals(validators.hash);
+    proof.publicInput.decision.validatorsRoot.assertEquals(validators.root);
+    proof.publicInput.count.assertGreaterThan(validators.count);
+    proof.publicInput.decision.contractAddress.assertEquals(this.address);
   }
 }

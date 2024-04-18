@@ -9,9 +9,9 @@ interface ContractConfig {
 
 export const nameContract: ContractConfig = {
   contractPrivateKey: PrivateKey.fromBase58(
-    "EKEcXQM5EyYzbZMMKhohE7MGabXu2s1F4LEk1mp28u1htUJn8Nya"
+    "EKEgtKjMgUmmdUgJjqpqbjeWNovCrgmZs1pwb2wAW4rLowEvTNqG"
   ),
-  contractAddress: "B62qqFsiNrTv6f9Nx6qe51udGvS2Sn8LUBHEX4iDyTXwMKZvWkENAME",
+  contractAddress: "B62qnnPQne2WA2fV5PvYSheugAaL3yx963tpi2A64uWAhcDuRHxNAME",
   firstBlockPrivateKey: PrivateKey.fromBase58(
     "EKDjCdQMYuc6F3XRRSmCaWYH1WiMUXHHQkvzgKBp9NnhA9PHGXwf"
   ),

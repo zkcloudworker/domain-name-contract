@@ -1,4 +1,4 @@
-import { Field, UInt64 } from "o1js";
+import { Field, UInt32, UInt64 } from "o1js";
 import {
   MapUpdateData,
   MapTransition,
@@ -8,7 +8,6 @@ import {
 } from "./transaction";
 import { MerkleMap } from "../lib/merkle-map";
 import { DomainDatabase } from "./database";
-import { NewBlockTransactions } from "../contract/domain-contract";
 import { serializeFields } from "../lib/fields";
 
 function isAccepted(element: DomainTransactionData, time: UInt64): boolean {
@@ -48,15 +47,17 @@ export function createBlock(params: {
   elements: DomainTransactionData[];
   map: MerkleMap;
   database: DomainDatabase;
+  time: UInt64;
   calculateTransactions?: boolean;
 }): {
   oldRoot: Field;
   root: Field;
-  txs: NewBlockTransactions;
+  txsHash: Field;
+  txsCount: UInt32;
   state: Field[];
   proofData: string[];
 } {
-  const { elements, map, database } = params;
+  const { elements, map, database, time } = params;
   const calculateTransactions = params.calculateTransactions ?? false;
   console.log(`Calculating block for ${elements.length} elements...`);
 
@@ -67,18 +68,16 @@ export function createBlock(params: {
     type: DomainTransactionType;
   }
 
-  const count = elements.length;
   const oldRoot = map.getRoot();
-  let hashSum = Field(0);
+  let txsHash = Field(0);
   const proofData: string[] = [];
   let state: Field[] = [];
   let updates: ElementState[] = [];
-  const time = UInt64.from(Date.now() - 1000 * 60 * 60 * 10);
 
   for (const element of elements) {
     const root = map.getRoot();
     const hash = element.tx.hash();
-    hashSum = hashSum.add(hash);
+    txsHash = txsHash.add(hash);
     const txType = element.txType();
     if (isAccepted(element, time)) {
       const key = element.tx.domain.key();
@@ -147,9 +146,7 @@ export function createBlock(params: {
     proofData,
     oldRoot,
     root,
-    txs: new NewBlockTransactions({
-      value: hashSum,
-      count: Field(count),
-    }),
+    txsCount: UInt32.from(elements.length),
+    txsHash,
   };
 }
