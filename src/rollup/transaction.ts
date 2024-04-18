@@ -10,6 +10,7 @@ import {
   Bool,
   UInt8,
   Signature,
+  UInt32,
 } from "o1js";
 import { Metadata } from "../contract/metadata";
 import { Storage } from "../contract/storage";
@@ -154,7 +155,7 @@ class MapTransition extends Struct({
   newRoot: Field,
   time: UInt64, // unix time when the map was updated
   hash: Field, // sum of hashes of all the new keys and values of the Map
-  count: Field, // number of new keys in the Map
+  count: UInt32, // number of new keys in the Map
 }) {
   // TODO: addNew, replaceExpired, extend, change
   static add(update: MapUpdateData) {
@@ -178,7 +179,7 @@ class MapTransition extends Struct({
       oldRoot: update.oldRoot,
       newRoot: update.newRoot,
       hash,
-      count: Field(1),
+      count: UInt32.from(1),
       time: update.time,
     });
   }
@@ -213,7 +214,7 @@ class MapTransition extends Struct({
       oldRoot: update.oldRoot,
       newRoot: update.newRoot,
       hash,
-      count: Field(1),
+      count: UInt32.from(1),
       time: update.time,
     });
   }
@@ -247,7 +248,7 @@ class MapTransition extends Struct({
       oldRoot: update.oldRoot,
       newRoot: update.newRoot,
       hash,
-      count: Field(1),
+      count: UInt32.from(1),
       time: update.time,
     });
   }
@@ -272,7 +273,7 @@ class MapTransition extends Struct({
       oldRoot: update.oldRoot,
       newRoot: update.newRoot,
       hash,
-      count: Field(1),
+      count: UInt32.from(1),
       time: update.time,
     });
   }
@@ -284,7 +285,7 @@ class MapTransition extends Struct({
       oldRoot: root,
       newRoot: root,
       hash,
-      count: Field(1),
+      count: UInt32.from(1),
       time,
     });
   }
