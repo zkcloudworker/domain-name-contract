@@ -182,6 +182,7 @@ export class BlockContract extends SmartContract {
     // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
     const root = previousBlockContract.root.get();
     const params = BlockParams.unpack(this.blockParams.getAndRequireEquals());
+    params.isFinal.assertFalse();
     params.isValidated = Bool(false);
     params.isInvalid = Bool(true);
     params.isFinal = Bool(true);
