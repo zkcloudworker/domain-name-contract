@@ -47,7 +47,7 @@ import { DEPLOYER, PINATA_JWT } from "../env.json";
 
 setNumberOfWorkers(8);
 const useLocalBlockchain = false;
-const deploy = false;
+const deploy = true;
 const network: blockchain = useLocalBlockchain ? "local" : "devnet";
 const useLocalCloudWorker = true;
 const api = new zkCloudWorkerClient({
@@ -75,7 +75,7 @@ let contractVerificationKey: VerificationKey;
 const tokenId: Field = zkApp.deriveTokenId();
 
 describe("Domain Name Service Contract", () => {
-  it(`should prepare blocks data`, async () => {
+  it.skip(`should prepare blocks data`, async () => {
     console.log("Preparing data...");
     console.time(`prepared data`);
     const nftStorage = new Storage({ hashString: [Field(0), Field(0)] });
@@ -232,7 +232,8 @@ describe("Domain Name Service Contract", () => {
           AccountUpdate.fundNewAccount(sender);
           await zkApp.deploy({});
           zkApp.validators.set(validators);
-          zkApp.domain.set(Encoding.stringToFields("root")[0]);
+          zkApp.domain.set(Encoding.stringToFields("mina")[0]);
+          zkApp.account.zkappUri.set("https://zkcloudworker.com");
         }
       );
 

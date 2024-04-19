@@ -1463,7 +1463,7 @@ __metadata:
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
     typescript: "npm:^5.4.5"
-    zkcloudworker: "npm:^0.3.10"
+    zkcloudworker: "npm:^0.3.16"
   languageName: unknown
   linkType: soft
 
@@ -3586,11 +3586,11 @@ __metadata:
 
 "typescript@patch:typescript@npm%3A^5.4.5#optional!builtin<compat/typescript>":
   version: 5.4.5
-  resolution: "typescript@patch:typescript@npm%3A5.4.5#optional!builtin<compat/typescript>::version=5.4.5&hash=d69c25"
+  resolution: "typescript@patch:typescript@npm%3A5.4.5#optional!builtin<compat/typescript>::version=5.4.5&hash=5adc0c"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/9cf4c053893bcf327d101b6c024a55baf05430dc30263f9adb1bf354aeffc11306fe1f23ba2f9a0209674359f16219b5b7d229e923477b94831d07d5a33a4217
+  checksum: 10c0/db2ad2a16ca829f50427eeb1da155e7a45e598eec7b086d8b4e8ba44e5a235f758e606d681c66992230d3fc3b8995865e5fd0b22a2c95486d0b3200f83072ec9
   languageName: node
   linkType: hard
 
@@ -3788,13 +3788,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zkcloudworker@npm:^0.3.10":
-  version: 0.3.10
-  resolution: "zkcloudworker@npm:0.3.10"
+"zkcloudworker@npm:^0.3.16":
+  version: 0.3.16
+  resolution: "zkcloudworker@npm:0.3.16"
   dependencies:
     axios: "npm:^1.6.8"
   peerDependencies:
     o1js: ^0.18.0
-  checksum: 10c0/c0695e82e99fa86fccaf2f9e0b54dfd3c9cd1232cf81da376b2111c04638c25df36b3c9303e6e40a30b0c61a0c6bf80d89cc651c797926beb5a729d17aaa7ca8
+  checksum: 10c0/feaabd877dd89a794a80365a179afc6767233445caae5f722ab6027d57b9ec27a5b763ebda01ba0bb8e7d91d56d431c1c399e99076a33691219a457f15abd866
   languageName: node
   linkType: hard

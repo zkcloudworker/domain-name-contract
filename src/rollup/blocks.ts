@@ -5,6 +5,7 @@ import {
   DomainTransaction,
   DomainTransactionData,
   DomainTransactionType,
+  DomainCloudTransactionData,
 } from "./transaction";
 import { MerkleMap } from "../lib/merkle-map";
 import { DomainDatabase } from "./database";
@@ -44,7 +45,7 @@ function isAccepted(element: DomainTransactionData, time: UInt64): boolean {
 }
 
 export function createBlock(params: {
-  elements: DomainTransactionData[];
+  elements: DomainCloudTransactionData[];
   map: MerkleMap;
   database: DomainDatabase;
   time: UInt64;
@@ -66,20 +67,24 @@ export function createBlock(params: {
     update?: MapUpdateData;
     oldRoot: Field;
     type: DomainTransactionType;
+    element: DomainTransactionData;
   }
 
   const oldRoot = map.getRoot();
   let txsHash = Field(0);
   const proofData: string[] = [];
   let state: Field[] = [];
-  let updates: ElementState[] = [];
+  const updates: ElementState[] = [];
 
-  for (const element of elements) {
+  for (const tx of elements) {
+    if (tx.domainData === undefined) continue;
+    const element = tx.domainData;
     const root = map.getRoot();
     const hash = element.tx.hash();
     txsHash = txsHash.add(hash);
     const txType = element.txType();
     if (isAccepted(element, time)) {
+      tx.serializedTx.status = "accepted";
       const key = element.tx.domain.key();
       const value = txType === "remove" ? Field(0) : element.tx.domain.value();
       map.set(key, value);
@@ -99,35 +104,43 @@ export function createBlock(params: {
           update,
           oldRoot: root,
           type: txType,
+          element,
         });
       }
     } else {
+      tx.serializedTx.status = "rejected";
+      tx.serializedTx.reason = "invalid request";
       if (calculateTransactions)
-        updates.push({ isElementAccepted: false, oldRoot: root, type: txType });
+        updates.push({
+          isElementAccepted: false,
+          oldRoot: root,
+          type: txType,
+          element,
+        });
     }
   }
 
   if (calculateTransactions) {
     let states: MapTransition[] = [];
-    for (let i = 0; i < elements.length; i++) {
-      const state = updates[i].isElementAccepted
-        ? updates[i].type === "add"
-          ? MapTransition.add(updates[i].update!)
-          : updates[i].type === "remove"
-          ? MapTransition.remove(updates[i].update!)
-          : updates[i].type === "update"
+    for (const update of updates) {
+      const state = update.isElementAccepted
+        ? update.type === "add"
+          ? MapTransition.add(update.update!)
+          : update.type === "remove"
+          ? MapTransition.remove(update.update!)
+          : update.type === "update"
           ? MapTransition.update(
-              updates[i].update!,
-              elements[i].oldDomain!,
-              elements[i].signature!
+              update.update!,
+              update.element.oldDomain!,
+              update.element.signature!
             )
-          : MapTransition.extend(updates[i].update!, elements[i].oldDomain!)
-        : MapTransition.reject(updates[i].oldRoot, time, elements[i].tx);
+          : MapTransition.extend(update.update!, update.element.oldDomain!)
+        : MapTransition.reject(update.oldRoot, time, update.element.tx);
       states.push(state);
       const tx = {
-        isAccepted: updates[i].isElementAccepted,
+        isAccepted: update.isElementAccepted,
         state: serializeFields(MapTransition.toFields(state)),
-        update: serializeFields(MapUpdateData.toFields(updates[i].update!)),
+        update: serializeFields(MapUpdateData.toFields(update.update!)),
       };
       proofData.push(JSON.stringify(tx, null, 2));
     }
