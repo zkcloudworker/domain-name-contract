@@ -45,8 +45,9 @@ export async function saveToIPFS(params: {
   data: any;
   pinataJWT: string;
   name: string;
+  keyvalues?: object;
 }): Promise<string | undefined> {
-  const { data, pinataJWT, name } = params;
+  const { data, pinataJWT, name, keyvalues } = params;
   console.log("saveToIPFS:", { name });
   if (pinataJWT === "local") {
     const hash = makeString(
@@ -64,6 +65,7 @@ export async function saveToIPFS(params: {
       },
       pinataMetadata: {
         name,
+        keyvalues,
       },
       pinataContent: data,
     };

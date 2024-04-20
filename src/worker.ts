@@ -7,6 +7,7 @@ import {
   sleep,
   getNetworkIdHash,
   CloudTransaction,
+  makeString,
 } from "zkcloudworker";
 import os from "os";
 import assert from "node:assert/strict";
@@ -65,6 +66,7 @@ import { saveToIPFS, loadFromIPFS } from "./contract/storage";
 import { blockProducer } from "./config";
 import { stringToFields } from "./lib/hash";
 import { Metadata } from "./contract/metadata";
+import { start } from "repl";
 
 const fullValidation = true;
 const waitTx = false;
@@ -208,6 +210,8 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     switch (this.cloud.task) {
       case "createTxTask":
         return await this.createTxTask();
+      case "getBlocksInfo":
+        return await this.getBlocksInfo();
       default:
         console.error("Unknown task in execute:", this.cloud.task);
         return undefined;
@@ -239,6 +243,32 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   }
 
   private async txTask(): Promise<string | undefined> {
+    const txToken = await this.cloud.getDataByKey("txToken");
+    if (txToken === undefined) {
+      console.error("txToken is undefined, exiting");
+      await this.cloud.deleteTask(this.cloud.taskId);
+      return "exiting txTask due to undefined txToken";
+    }
+    if (this.cloud.args === undefined) {
+      console.error("cloud.args are undefined, exiting");
+      await this.cloud.deleteTask(this.cloud.taskId);
+      return "exiting txTask due to undefined cloud.args";
+    }
+    if (txToken !== JSON.parse(this.cloud.args).txToken) {
+      console.error("txToken is wrong, exiting");
+      await this.cloud.deleteTask(this.cloud.taskId);
+      return "exiting txTask due to wrong txToken";
+    }
+    const timeStarted = await this.cloud.getDataByKey("txTask.timeStarted");
+    if (
+      timeStarted !== undefined &&
+      Date.now() - Number(timeStarted) < 1000 * 60
+    ) {
+      console.error(
+        "txTask is already running, detected double invocation, exiting"
+      );
+      return "exiting txTask due to double invocation";
+    }
     const transactions = await this.cloud.getTransactions();
     console.log(`txTask with ${transactions.length} transaction(s)`);
     if (transactions.length !== 0) {
@@ -252,6 +282,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         ).toLocaleString()}...`
       );
       try {
+        // TODO: Use processTransactions ???
         const result = await this.createRollupBlock(transactions);
         return result;
       } catch (error) {
@@ -262,6 +293,92 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     return "no transactions to process";
   }
 
+  private async getBlocksInfo(): Promise<string | undefined> {
+    const MAX_BLOCKS = 10;
+    try {
+      let startBlock: PublicKey | undefined = undefined;
+      let contractAddress: PublicKey | undefined = undefined;
+      if (this.cloud.args !== undefined) {
+        const args = JSON.parse(this.cloud.args);
+        startBlock =
+          args.startBlock === undefined
+            ? undefined
+            : PublicKey.fromBase58(args.startBlock);
+        contractAddress = PublicKey.fromBase58(args.contractAddress);
+      }
+      if (contractAddress === undefined) {
+        console.error("getBlocksInfo: contractAddress is undefined");
+        return "getBlocksInfo: contractAddress is undefined";
+      }
+      const zkApp = new DomainNameContract(contractAddress);
+      const tokenId = zkApp.deriveTokenId();
+      await fetchMinaAccount({
+        publicKey: contractAddress,
+      });
+      if (!Mina.hasAccount(contractAddress)) {
+        console.error(
+          `getBlocksInfo: Contract ${contractAddress.toBase58()} not found`
+        );
+        return `error: Contract ${contractAddress.toBase58()} not found`;
+      }
+      if (startBlock === undefined) {
+        startBlock = zkApp.lastBlockAddress.get();
+      }
+      await fetchMinaAccount({ publicKey: startBlock, tokenId });
+      if (!Mina.hasAccount(startBlock, tokenId)) {
+        console.error(
+          `getBlocksInfo: Block ${startBlock.toBase58()} not found`
+        );
+        return `error: Block ${startBlock.toBase58()} not found`;
+      }
+      let count = 0;
+      let blockAddress = startBlock;
+      let block = new BlockContract(blockAddress, tokenId);
+      let blockNumber = Number(block.blockNumber.get().toBigInt());
+      const data: {}[] = [];
+      while (count < MAX_BLOCKS && blockNumber > 0) {
+        const root = block.root.get().toJSON();
+        const storage = block.storage.get().toIpfsHash();
+        const flags = BlockParams.unpack(block.blockParams.get());
+        const isValidated = flags.isValidated.toBoolean();
+        const isInvalid = flags.isInvalid.toBoolean();
+        const isProved = flags.isProved.toBoolean();
+        const isFinal = flags.isFinal.toBoolean();
+        const timeCreated = flags.timeCreated;
+        const txsCount = flags.txsCount;
+        const txsHash = block.txsHash.get().toJSON();
+        const previousBlockAddress = block.previousBlock.get();
+        data.push({
+          blockNumber,
+          root,
+          storage,
+          isValidated,
+          isInvalid,
+          isProved,
+          isFinal,
+          timeCreated,
+          txsCount,
+          txsHash,
+          previousBlockAddress: previousBlockAddress.toBase58(),
+        });
+
+        blockAddress = previousBlockAddress;
+        block = new BlockContract(blockAddress, tokenId);
+        await fetchMinaAccount({
+          publicKey: blockAddress,
+          tokenId,
+          force: true,
+        });
+        blockNumber = Number(block.blockNumber.get().toBigInt());
+        count++;
+      }
+      return JSON.stringify(data, null, 2);
+    } catch (error) {
+      console.error("Error in getBlocksInfo", error);
+      return "Error in getBlocksInfo";
+    }
+  }
+
   private async createTxTask(): Promise<string | undefined> {
     // TODO: add fetchMinaAccount and check that block validation tx is confirmed
     if (this.cloud.args === undefined)
@@ -270,17 +387,20 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     console.log(`Adding txTask...`);
     if (args.contractAddress === undefined)
       throw new Error("args.contractAddress is undefined");
+    const txToken = makeString(32);
+    await this.cloud.saveDataByKey("txToken", txToken);
     await this.cloud.addTask({
       args: JSON.stringify(
         {
           contractAddress: args.contractAddress,
+          txToken,
         },
         null,
         2
       ),
       task: "txTask",
-      maxAttempts: 12,
-      metadata: this.cloud.metadata,
+      maxAttempts: 24,
+      metadata: `tx processing`,
       userId: this.cloud.userId,
     });
     return "txTask added";
@@ -340,6 +460,28 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       await this.cloud.deleteTask(this.cloud.taskId);
       console.timeEnd("proveBlock");
       return "block is already proved";
+    }
+
+    const previousBlockAddress = block.previousBlock.get();
+    await fetchMinaAccount({
+      publicKey: previousBlockAddress,
+      tokenId,
+      force: true,
+    });
+    if (!Mina.hasAccount(previousBlockAddress, tokenId)) {
+      console.log(
+        `Previous block ${previousBlockAddress.toBase58()} not found`
+      );
+      console.timeEnd("proveBlock");
+      return "previous block is not found";
+    }
+
+    const previousBlock = new BlockContract(previousBlockAddress, tokenId);
+    const oldRoot = previousBlock.root.get();
+    if (oldRoot.toJSON() !== proof.publicInput.oldRoot.toJSON()) {
+      console.error(`Invalid previous block root`);
+      console.timeEnd("proveBlock");
+      return "Invalid previous block root";
     }
 
     await this.compile();
@@ -644,7 +786,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         fee: await fee(),
         memo: validated
           ? `block ${blockNumber} is valid`
-          : `block ${blockNumber} is invalid`,
+          : `bad block ${blockNumber}`,
       },
       async () => {
         validated
@@ -674,7 +816,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       const jobId = await this.cloud.recursiveProof({
         transactions: proofData,
         task: "proofMap",
-        metadata: this.cloud.metadata,
+        metadata: `block ${args.blockNumber} proof creation`,
         userId: this.cloud.userId,
         args: JSON.stringify({ timeCreated: timeCreated.toJSON() }),
       });
@@ -691,7 +833,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
           2
         ),
         task: "proveBlock",
-        metadata: this.cloud.metadata,
+        metadata: `prove block ${args.blockNumber}`,
         userId: this.cloud.userId,
       });
     }
@@ -807,7 +949,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   ): Promise<string | undefined> {
     const MIN_TRANSACTIONS = 2;
     const MAX_TRANSACTIONS = 4;
-    const MIN_TIME_BETWEEN_BLOCKS = 1000 * 60 * 20; // 20 minutes
+    const MIN_TIME_BETWEEN_BLOCKS = 1000 * 60 * 17; // 20 minutes, including block creation time
 
     if (txs.length < MIN_TRANSACTIONS) {
       console.log("Not enough transactions to create a block:", txs.length);
@@ -848,8 +990,8 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         }
         if (timeStarted > Date.now() - MIN_TIME_BETWEEN_BLOCKS) {
           console.log("Not enough time between blocks:", {
-            lastBlockTme: timeStarted.toLocaleString(),
-            now: Date.now().toLocaleString(),
+            lastBlockTme: new Date(timeStarted).toLocaleString(),
+            now: new Date().toLocaleString(),
           });
           return "Not enough time between blocks";
         }
@@ -949,7 +1091,12 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const mapHash = await saveToIPFS({
       data: mapJson,
       pinataJWT: process.env.PINATA_JWT!,
-      name: `${contractAddress.toBase58()}.block.${blockNumber}.map.json`,
+      name: `block.${blockNumber}.map.${contractAddress.toBase58()}.json`,
+      keyvalues: {
+        blockNumber: blockNumber.toString(),
+        type: "Merkle Map",
+        contractAddress: contractAddress.toBase58(),
+      },
     });
     if (mapHash === undefined) throw new Error("mapHash is undefined");
     const json = {
@@ -977,7 +1124,12 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     const hash = await saveToIPFS({
       data: json,
       pinataJWT: process.env.PINATA_JWT!,
-      name: `${contractAddress.toBase58()}.block.${blockNumber}.json`,
+      name: `block.${blockNumber}.${contractAddress.toBase58()}.json`,
+      keyvalues: {
+        blockNumber: blockNumber.toString(),
+        type: "block data",
+        contractAddress: contractAddress.toBase58(),
+      },
     });
     if (hash === undefined) throw new Error("hash is undefined");
 
@@ -1052,7 +1204,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     await fetchMinaAccount({ publicKey: blockProducer.publicKey, force: true });
 
     console.log(`Sending tx for block ${blockNumber}...`);
-    const memo = `block ${blockNumber}`;
+    const memo = `block ${blockNumber} created: ${count} txs`.substring(0, 30);
     const tx = await Mina.transaction(
       { sender: blockProducer.publicKey, fee: await fee(), memo },
       async () => {
@@ -1093,7 +1245,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
           2
         ),
         task: "validateBlock",
-        metadata: this.cloud.metadata,
+        metadata: `block ${blockNumber} validation`,
         userId: this.cloud.userId,
       });
       for (let i = 0; i < length; i++) {

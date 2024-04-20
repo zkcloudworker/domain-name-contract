@@ -2,7 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import { PrivateKey, PublicKey } from "o1js";
 import { nameContract } from "../../src/config";
 import { JWT } from "../../src/config";
-import { zkCloudWorkerClient, makeString, sleep } from "zkcloudworker";
+import { zkCloudWorkerClient, sleep } from "zkcloudworker";
 
 const ELEMENTS_NUMBER = 2;
 const transactions: string[] = [];
@@ -47,6 +47,7 @@ describe("Domain Name Service Contract", () => {
 
   it.skip(`should add task to process transactions`, async () => {
     console.log(`Adding task to process transactions...`);
+    console.time(`task added`);
     let args: string = JSON.stringify({
       contractAddress: contractPublicKey.toBase58(),
     });
@@ -61,9 +62,55 @@ describe("Domain Name Service Contract", () => {
       mode: "sync",
     });
     console.log(`task api call result:`, result);
+    console.timeEnd(`task added`);
   });
 
-  it(`should create a block`, async () => {
+  it(`should get blocks info`, async () => {
+    console.log(`Getting blocks info...`);
+    console.time(`block info received`);
+    let args: string = JSON.stringify({
+      contractAddress: contractPublicKey.toBase58(),
+    });
+
+    let result = await api.execute({
+      repo: "nameservice",
+      task: "getBlocksInfo",
+      transactions: [],
+      args,
+      developer: "@staketab",
+      metadata: `txTask`,
+      mode: "sync",
+    });
+
+    console.timeEnd(`block info received`);
+    console.log(`info api call result:`, result);
+    let data = JSON.parse(result.result.result);
+    console.log(`data:`, data);
+    const startBlock = data[data.length - 1].previousBlockAddress;
+    console.log(`startBlock:`, startBlock);
+
+    console.time(`block info received`);
+    args = JSON.stringify({
+      contractAddress: contractPublicKey.toBase58(),
+      startBlock,
+    });
+
+    result = await api.execute({
+      repo: "nameservice",
+      task: "getBlocksInfo",
+      transactions: [],
+      args,
+      developer: "@staketab",
+      metadata: `txTask`,
+      mode: "sync",
+    });
+
+    console.timeEnd(`block info received`);
+    data = JSON.parse(result.result.result);
+    console.log(`data:`, data);
+  });
+
+  it.skip(`should create a block`, async () => {
     console.time(`Txs to the block sent`);
     const result = await api.sendTransactions({
       repo: "nameservice",
@@ -74,3 +121,16 @@ describe("Domain Name Service Contract", () => {
     console.timeEnd(`Txs to the block sent`);
   });
 });
+
+function makeString(length: number): string {
+  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
+  let outString: string = ``;
+  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
+  const inOptions: string = `abcdefghijklmnopqrstuvwxyz`;
+
+  for (let i = 0; i < length; i++) {
+    outString += inOptions.charAt(Math.floor(Math.random() * inOptions.length));
+  }
+
+  return outString;
+}

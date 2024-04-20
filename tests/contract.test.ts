@@ -11,11 +11,18 @@ import {
   PublicKey,
   Transaction,
   Encoding,
+  verify,
 } from "o1js";
-import { ValidatorsVoting } from "../src/rollup/validators";
+import {
+  ValidatorsVoting,
+  ValidatorsDecision,
+  ValidatorDecisionType,
+  ValidatorsVotingProof,
+} from "../src/rollup/validators";
 import {
   DomainNameContract,
   BlockContract,
+  ChangeValidatorsData,
 } from "../src/contract/domain-contract";
 import { stringToFields } from "../src/lib/hash";
 import { getValidators } from "../src/rollup/validators-proof";
@@ -32,6 +39,7 @@ import {
   fetchMinaAccount,
   fee,
   initBlockchain,
+  getNetworkIdHash,
 } from "zkcloudworker";
 import {
   DomainName,
@@ -42,6 +50,7 @@ import {
   MapUpdate,
 } from "../src/rollup/transaction";
 import { Metadata } from "../src/contract/metadata";
+import { calculateValidatorsProof } from "../src/rollup/validators-proof";
 import { zkcloudworker } from "../src/worker"; //, setVerificationKey
 import { DEPLOYER, PINATA_JWT } from "../env.json";
 
@@ -59,12 +68,11 @@ const api = new zkCloudWorkerClient({
 let deployer: PrivateKey;
 let sender: PublicKey;
 const ELEMENTS_NUMBER = 3;
-const BLOCKS_NUMBER = 1;
 const domainNames: string[][] = [];
 
 const { validators, tree } = getValidators(0);
 
-const contractPrivateKey = nameContract.contractPrivateKey; //PrivateKey.random();
+const contractPrivateKey = PrivateKey.random();
 const contractPublicKey = contractPrivateKey.toPublicKey();
 
 const zkApp = new DomainNameContract(contractPublicKey);
@@ -73,43 +81,42 @@ let validatorsVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
 let contractVerificationKey: VerificationKey;
 const tokenId: Field = zkApp.deriveTokenId();
+const transactions: string[] = [];
+
+type DomainTransactionType = "add" | "extend" | "update" | "remove";
+interface TransactionJSON {
+  operation: DomainTransactionType;
+  name: string;
+  address: string;
+  expiry: number;
+  metadata?: string;
+  oldDomain?: {
+    name: string;
+    address: string;
+    expiry: number;
+    metadata?: string;
+  };
+  signature?: string;
+}
 
 describe("Domain Name Service Contract", () => {
-  it.skip(`should prepare blocks data`, async () => {
+  it(`should prepare blocks data`, async () => {
     console.log("Preparing data...");
     console.time(`prepared data`);
-    const nftStorage = new Storage({ hashString: [Field(0), Field(0)] });
-    for (let j = 0; j < BLOCKS_NUMBER; j++) {
-      const blockElements: string[] = [];
-      for (let i = 0; i < ELEMENTS_NUMBER; i++) {
-        const domainName: DomainName = new DomainName({
-          name: stringToFields(makeString(20))[0],
-          data: new DomainNameValue({
-            address: PrivateKey.random().toPublicKey(),
-            metadata: new Metadata({
-              data: Field(0),
-              kind: Field(0),
-            }),
-            storage: nftStorage,
-            expiry: UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 365),
-          }),
-        });
-        const domainTransaction: DomainTransaction = new DomainTransaction({
-          type: DomainTransactionEnum.add,
-          domain: domainName,
-        });
-        const domainTransactionData: DomainTransactionData =
-          new DomainTransactionData(domainTransaction);
-        blockElements.push(
-          JSON.stringify(domainTransactionData.toJSON(), null, 2)
-        );
-      }
-      domainNames.push(blockElements);
+    for (let i = 0; i < ELEMENTS_NUMBER; i++) {
+      const tx: TransactionJSON = {
+        operation: "add",
+        name: makeString(20),
+        address: PrivateKey.random().toPublicKey().toBase58(),
+        expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
+      };
+      transactions.push(JSON.stringify(tx, null, 2));
     }
     console.timeEnd(`prepared data`);
   });
 
   it(`should initialize blockchain`, async () => {
+    Memory.info("initializing blockchain");
     if (useLocalBlockchain) {
       const { keys } = await initBlockchain(network, 1);
       deployer = keys[0].privateKey;
@@ -153,6 +160,7 @@ describe("Domain Name Service Contract", () => {
     expect(deployer.toPublicKey().toBase58()).toBe(sender.toBase58());
     process.env.PINATA_JWT = PINATA_JWT;
     expect(process.env.PINATA_JWT).toBeDefined();
+    Memory.info("blockchain initialized");
   });
 
   if (deploy) {
@@ -220,6 +228,7 @@ describe("Domain Name Service Contract", () => {
         contractVerificationKey.hash.toJSON()
       );
       console.log("block verification key", blockVerificationKey.hash.toJSON());
+      Memory.info("compiled");
     });
 
     it(`should deploy contract`, async () => {
@@ -240,11 +249,12 @@ describe("Domain Name Service Contract", () => {
       tx.sign([deployer, contractPrivateKey]);
       await sendTx(tx, "deploy");
       Memory.info("deployed");
-      await sleep(10000);
+      await sleep(30000);
     });
 
     it(`should sent block 0`, async () => {
       console.log(`Sending block 0...`);
+      Memory.info("sending block 0");
       await fetchMinaAccount({ publicKey: sender, force: true });
       await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
 
@@ -262,95 +272,42 @@ describe("Domain Name Service Contract", () => {
       tx.sign([deployer, nameContract.firstBlockPrivateKey!]);
       await sendTx(tx, "block 0");
       Memory.info("block 0 sent");
-      await sleep(10000);
+      await sleep(30000);
       //console.log("PINATA_JWT:", process.env.PINATA_JWT);
     });
   }
 
-  it.skip(`should send transactions`, async () => {
+  it(`should send transactions`, async () => {
     console.log(`Adding task to process transactions...`);
     let args: string = JSON.stringify({
       contractAddress: contractPublicKey.toBase58(),
-      // "B62qnMamFGnWsMkopVzeKvUh1CZEQbbNpkPCsjFfcsS2sgHFyWQFC7R",
-      // "B62qnBuXnXAWg1uUbMrktsXzcWc89yieG2bQkRxM9JATu2WGvPYPwRr",
-      //contractPublicKey.toBase58(),
-      //"B62qqPUw2jxSBGsBjTKWKxjcdQ15hzmYEjF4hn9uqBKbRQLzZx1mR1W", //contractPublicKey.toBase58(),
     });
-
-    let sent = false;
-    let apiresult;
-    let attempt = 1;
-    while (sent === false) {
-      apiresult = await api.execute({
-        repo: "nameservice",
-        task: "createTxTask",
-        transactions: [],
-        args,
-        developer: "@staketab",
-        metadata: `txTask`,
-      });
-      if (apiresult.success === true) sent = true;
-      else {
-        console.log(`Error creating job for txTask, retrying...`);
-        await sleep(30000 * attempt);
-        attempt++;
-      }
-    }
-
+    let apiresult = await api.execute({
+      repo: "nameservice",
+      task: "createTxTask",
+      transactions: [],
+      args,
+      developer: "@staketab",
+      metadata: `txTask`,
+      mode: "sync",
+    });
     expect(apiresult).toBeDefined();
     if (apiresult === undefined) return;
     expect(apiresult.success).toBe(true);
 
-    expect(apiresult.jobId).toBeDefined();
-    console.log(`txTask created, jobId:`, apiresult.jobId);
-    if (apiresult.jobId === undefined) return;
+    console.time(`Txs to the block sent`);
+    apiresult = await api.sendTransactions({
+      repo: "nameservice",
+      developer: "@staketab",
+      transactions,
+    });
+    expect(apiresult).toBeDefined();
+    if (apiresult === undefined) return;
+    expect(apiresult.success).toBe(true);
+    console.log(`tx api call result:`, apiresult);
+    console.timeEnd(`Txs to the block sent`);
 
-    for (let i = 0; i < BLOCKS_NUMBER; i++) {
-      const blockNumber = i + 1;
-      console.time(`Txs to the block ${blockNumber} sent`);
-      for (let j = 0; j < ELEMENTS_NUMBER; j++) {
-        let sent = false;
-        let apiresult;
-        let attempt = 1;
-        while (sent === false) {
-          apiresult = await api.sendTransaction({
-            repo: "nameservice",
-            transaction: domainNames[i][j],
-            developer: "@staketab",
-          });
-          if (apiresult.success === true) sent = true;
-          else {
-            console.log(`Error sending tx ${j} to block ${i}, retrying...`);
-            await sleep(30000 * attempt);
-            attempt++;
-          }
-        }
-
-        expect(apiresult).toBeDefined();
-        if (apiresult === undefined) return;
-        expect(apiresult.success).toBe(true);
-
-        expect(apiresult.jobId).toBeDefined();
-        //console.log(`Tx ${j + 1} sent, jobId:`, apiresult.jobId);
-        if (apiresult.jobId === undefined)
-          throw new Error("Job ID is undefined");
-        await sleep(2000);
-      }
-      console.timeEnd(`Txs to the block ${blockNumber} sent`);
-
-      while (
-        (await LocalCloud.processLocalTasks({
-          developer: "@staketab",
-          repo: "nameservice",
-          localWorker: zkcloudworker,
-          chain: "local",
-        })) > 1
-      ) {
-        await sleep(30000);
-      }
-      Memory.info(`block ${blockNumber} processed`);
-    }
-    console.log(`Processing remaining tasks...`);
+    console.log(`Processing tasks...`);
     while (
       (await LocalCloud.processLocalTasks({
         developer: "@staketab",
@@ -361,46 +318,22 @@ describe("Domain Name Service Contract", () => {
     ) {
       await sleep(30000);
     }
+    Memory.info(`task processed`);
   });
 
-  async function sendTx(tx: Transaction, description?: string) {
-    const txSent = await tx.send();
-    if (txSent.errors.length > 0) {
-      console.error(
-        `${description ?? ""} tx error: hash: ${txSent.hash} status: ${
-          txSent.status
-        }  errors: ${txSent.errors}`
-      );
-      throw new Error("Transaction failed");
-    }
-    console.log(
-      `${description ?? ""} tx sent: hash: ${txSent.hash} status: ${
-        txSent.status
-      }`
-    );
-
-    const txIncluded = await txSent.wait();
-    console.log(
-      `${description ?? ""} tx included into block: hash: ${
-        txIncluded.hash
-      } status: ${txIncluded.status}`
-    );
-  }
-
-  /*
-  it.skip(`should change validators`, async () => {
+  it(`should change validators`, async () => {
     console.log(`Changing validators...`);
+    Memory.info("changing validators");
     const expiry = UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000);
     const decision = new ValidatorsDecision({
-      contract: contractPublicKey,
-      chainId,
-      root: validatorsRoot,
-      decision: ValidatorDecisionType.setValidators,
-      address: PrivateKey.random().toPublicKey(),
-      data: ValidatorDecisionExtraData.fromSetValidatorsData({
-        root: validatorsRoot,
-        hash: totalHash,
-        oldRoot: tree.getRoot(),
+      contractAddress: contractPublicKey,
+      chainId: getNetworkIdHash(),
+      validatorsRoot: validators.root,
+      decisionType: ValidatorDecisionType.setValidators,
+      data: ChangeValidatorsData.toFields({
+        new: validators,
+        old: validators,
+        storage: new Storage({ hashString: [Field(0), Field(0)] }),
       }),
       expiry,
     });
@@ -423,18 +356,44 @@ describe("Domain Name Service Contract", () => {
         await zkApp.setValidators(proof);
       }
     );
+    Memory.info("proving");
+    console.log("proving...");
     await tx.prove();
+    Memory.info("signing");
+    console.log("signing...");
     tx.sign([deployer]);
+    Memory.info("sending");
+    Memory.info("sending, full info", true);
+    console.log("sending...");
     await sendTx(tx, "Change validators");
-    await sleep(20000);
-    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
-    const validators = zkApp.validators.get();
-    const validatorsHash = zkApp.validatorsHash.get();
-    expect(validators.toJSON()).toBe(validators.toJSON());
-    expect(validatorsHash.toJSON()).toBe(totalHash.toJSON());
+    Memory.info("validators changed");
+    Memory.info("validators changed, full info", true);
   });
-  */
 });
+
+async function sendTx(tx: Transaction, description?: string) {
+  const txSent = await tx.send();
+  if (txSent.errors.length > 0) {
+    console.error(
+      `${description ?? ""} tx error: hash: ${txSent.hash} status: ${
+        txSent.status
+      }  errors: ${txSent.errors}`
+    );
+    throw new Error("Transaction failed");
+  }
+  console.log(
+    `${description ?? ""} tx sent: hash: ${txSent.hash} status: ${
+      txSent.status
+    }`
+  );
+
+  const txIncluded = await txSent.wait();
+  console.log(
+    `${description ?? ""} tx included into block: hash: ${
+      txIncluded.hash
+    } status: ${txIncluded.status}`
+  );
+}
 
 /*
   it.skip(`should send block 1`, async () => {
