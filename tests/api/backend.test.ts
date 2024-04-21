@@ -24,7 +24,7 @@ interface Transaction {
 }
 
 describe("Domain Name Service API", () => {
-  it(`should prepare transactions data`, async () => {
+  it.skip(`should prepare transactions data`, async () => {
     console.log("Preparing data...");
     console.time(`prepared data`);
     for (let i = 0; i < ELEMENTS_NUMBER; i++) {
@@ -39,7 +39,7 @@ describe("Domain Name Service API", () => {
     console.timeEnd(`prepared data`);
   });
 
-  it(`should add task to process transactions`, async () => {
+  it.skip(`should add task to process transactions`, async () => {
     console.log(`Adding task to process transactions...`);
     /*
       adding task to process transactions
@@ -60,7 +60,27 @@ describe("Domain Name Service API", () => {
     console.log(`task api call result:`, answer);
   });
 
-  it.skip(`should get blocks info`, async () => {
+  it.skip(`should restart the block validation`, async () => {
+    console.log(`Restarting block validation...`);
+    /*
+      When the are problems with devnet and it does not produce blocks with zkApp txs for a long time
+      the validation and proving of the blocks is stopped as security measure
+      This call restarts the block validation
+      */
+    let args: string = JSON.stringify({
+      contractAddress,
+    });
+
+    let answer = await zkCloudWorkerRequest({
+      command: "execute",
+      task: "restart",
+      args,
+      metadata: `backend restart`,
+    });
+    console.log(`restart api call result:`, answer);
+  });
+
+  it(`should get blocks info`, async () => {
     console.log(`Getting blocks info...`);
     let args: string = JSON.stringify({
       contractAddress,
@@ -96,17 +116,17 @@ describe("Domain Name Service API", () => {
     data = JSON.parse(answer.result);
     console.log(`next 10 blocks data:`, data);
 
-    const hash = data[data.length - 1].storage;
+    const hash = data[data.length - 1].ipfs;
     const blockData = await loadFromIPFS(hash);
     console.log(`block data:`, blockData);
 
     const map = blockData.map;
     console.log(`map hash:`, map);
     const mapData = await loadFromIPFS(map.substring(2));
-    console.log(`map data:`, mapData);
+    //console.log(`map data:`, mapData);
   });
 
-  it(`should send transactions`, async () => {
+  it.skip(`should send transactions`, async () => {
     const answer = await zkCloudWorkerRequest({
       command: "sendTransactions",
       transactions,
