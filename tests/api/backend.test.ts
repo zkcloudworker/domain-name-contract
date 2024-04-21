@@ -2,7 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import { PrivateKey } from "o1js";
 import axios from "axios";
 
-const ELEMENTS_NUMBER = 32;
+const ELEMENTS_NUMBER = 2;
 const transactions: string[] = [];
 const contractAddress =
   "B62qqNQ9kMtc4L9p19eK8SfLRy8EamtMRWAVqcCaJSM1Q5AD3DjNAME";
@@ -80,7 +80,7 @@ describe("Domain Name Service API", () => {
     console.log(`restart api call result:`, answer);
   });
 
-  it.skip(`should get blocks info`, async () => {
+  it(`should get blocks info`, async () => {
     console.log(`Getting blocks info...`);
     let args: string = JSON.stringify({
       contractAddress,
@@ -126,7 +126,7 @@ describe("Domain Name Service API", () => {
     //console.log(`map data:`, mapData);
   });
 
-  it(`should send transactions`, async () => {
+  it.skip(`should send transactions`, async () => {
     const answer = await zkCloudWorkerRequest({
       command: "sendTransactions",
       transactions,
