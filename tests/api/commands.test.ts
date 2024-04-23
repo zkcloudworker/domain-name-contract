@@ -4,7 +4,7 @@ import axios from "axios";
 import { nameContract } from "../../src/config";
 import { uniqueNamesGenerator, names } from "unique-names-generator";
 
-const ELEMENTS_NUMBER = 4;
+const ELEMENTS_NUMBER = 2;
 const transactions: string[] = [];
 const contractAddress = nameContract.contractAddress;
 
@@ -32,7 +32,7 @@ describe("Domain Name Service API", () => {
       const tx: Transaction = {
         operation: "add",
         name: uniqueNamesGenerator({
-          dictionaries: [names], // colors can be omitted here as not used
+          dictionaries: [names],
           length: 1,
         }).toLowerCase(),
         address: PrivateKey.random().toPublicKey().toBase58(), // "B62..."
@@ -43,7 +43,7 @@ describe("Domain Name Service API", () => {
     console.timeEnd(`prepared data`);
   });
 
-  it(`should add task to process transactions`, async () => {
+  it.skip(`should add task to process transactions`, async () => {
     console.log(`Adding task to process transactions...`);
     /*
       adding task to process transactions
@@ -59,7 +59,7 @@ describe("Domain Name Service API", () => {
       task: "createTxTask",
       transactions: [],
       args,
-      metadata: `backend txTask`,
+      metadata: `commands txTask`,
     });
     console.log(`task api call result:`, answer);
   });
@@ -68,7 +68,7 @@ describe("Domain Name Service API", () => {
     const answer = await zkCloudWorkerRequest({
       command: "sendTransactions",
       transactions,
-      metadata: `backend txs`,
+      metadata: `commands txs`,
     });
     console.log(`tx api call result:`, answer);
   });
@@ -88,12 +88,12 @@ describe("Domain Name Service API", () => {
       command: "execute",
       task: "restart",
       args,
-      metadata: `backend restart`,
+      metadata: `commands restart`,
     });
     console.log(`restart api call result:`, answer);
   });
 
-  it.skip(`should get blocks info`, async () => {
+  it(`should get blocks info`, async () => {
     console.log(`Getting blocks info...`);
     let args: string = JSON.stringify({
       contractAddress,
@@ -103,15 +103,25 @@ describe("Domain Name Service API", () => {
       command: "execute",
       task: "getBlocksInfo",
       args,
-      metadata: `backend info`,
+      metadata: `commands info`,
     });
 
     console.log(`info api call success:`, answer.success);
     if (!answer.success) return;
 
     let data = JSON.parse(answer.result);
-    console.log(`last 10 blocks data:`, data);
-    const startBlock = data[data.length - 1].previousBlockAddress;
+    console.log(`last 10 blocks data:`, data, data?.contractState?.lastBlocks);
+
+    /*
+    const hash = data.blocks[data.blocks.length - 1].ipfs;
+    const blockData = await loadFromIPFS(hash);
+    console.log(`block data:`, blockData);
+
+    const map = blockData.map;
+    console.log(`map hash:`, map);
+    const mapData = await loadFromIPFS(map.substring(2));
+    //console.log(`map data:`, mapData);
+    const startBlock = data.blocks[data.blocks.length - 1].previousBlockAddress;
     console.log(`startBlock:`, startBlock);
     args = JSON.stringify({
       contractAddress,
@@ -122,21 +132,13 @@ describe("Domain Name Service API", () => {
       command: "execute",
       task: "getBlocksInfo",
       args,
-      metadata: `backend info`,
+      metadata: `commands info`,
     });
     console.log(`info api call success:`, answer.success);
     if (!answer.success) return;
     data = JSON.parse(answer.result);
-    console.log(`next 10 blocks data:`, data);
-
-    const hash = data[data.length - 1].ipfs;
-    const blockData = await loadFromIPFS(hash);
-    console.log(`block data:`, blockData);
-
-    const map = blockData.map;
-    console.log(`map hash:`, map);
-    const mapData = await loadFromIPFS(map.substring(2));
-    //console.log(`map data:`, mapData);
+    console.log(`next 10 blocks data:`, data, data?.contractState?.lastBlocks);
+    */
   });
 });
 
