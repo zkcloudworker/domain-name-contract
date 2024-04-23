@@ -56,13 +56,13 @@ const api = new zkCloudWorkerClient({
 
 let deployer: PrivateKey;
 let sender: PublicKey;
-const ELEMENTS_NUMBER = 1;
-const BLOCKS_NUMBER = 1;
+const ELEMENTS_NUMBER = 2;
+const BLOCKS_NUMBER = 3;
 const domainNames: string[][] = [];
 
 const { validators, tree } = getValidators(0);
 
-const contractPrivateKey = nameContract.contractPrivateKey;
+const contractPrivateKey = PrivateKey.random(); //nameContract.contractPrivateKey;
 const contractPublicKey = contractPrivateKey.toPublicKey();
 
 const zkApp = new DomainNameContract(contractPublicKey);

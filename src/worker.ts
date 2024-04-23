@@ -25,6 +25,7 @@ import {
   Bool,
   Signature,
   MerkleMap,
+  Encoding,
 } from "o1js";
 import {
   MapTransition,
@@ -69,16 +70,16 @@ import { Metadata } from "./contract/metadata";
 
 const fullValidation = true;
 const waitTx = true;
-const proofsOff = true as boolean;
+const proofsOff = false as boolean;
 
 export class DomainNameServiceWorker extends zkCloudWorker {
   static mapUpdateVerificationKey: VerificationKey | undefined = undefined;
   static contractVerificationKey: VerificationKey | undefined = undefined;
   static blockContractVerificationKey: VerificationKey | undefined = undefined;
   static validatorsVerificationKey: VerificationKey | undefined = undefined;
-  readonly MIN_TIME_BETWEEN_BLOCKS = 1000 * 60 * 20; // 20 minutes
+  readonly MIN_TIME_BETWEEN_BLOCKS = 1000 * 60 * 10; // 20 minutes
   readonly MIN_TRANSACTIONS = 2;
-  readonly MAX_TRANSACTIONS = 10;
+  readonly MAX_TRANSACTIONS = 4;
 
   constructor(cloud: Cloud) {
     super(cloud);
@@ -455,10 +456,34 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         return `error: Block ${startBlock.toBase58()} not found`;
       }
       let count = 0;
+      const validators = zkApp.validators.get();
+      const lastBlocks = LastBlocks.unpack(zkApp.blocks.get());
+      const contractState = {
+        domain: Encoding.stringFromFields([zkApp.domain.get()]),
+        lastBlocks: {
+          lastBlock: {
+            address: lastBlocks.lastBlockAddress.toBase58(),
+            number: lastBlocks.lastBlockNumber.toBigInt().toString(),
+          },
+          lastValidatedBlock: {
+            address: lastBlocks.lastValidatedBlockAddress.toBase58(),
+            number: lastBlocks.lastValidatedBlockNumber.toBigInt().toString(),
+          },
+          lastProvedBlock: {
+            address: lastBlocks.lastProvedBlockAddress.toBase58(),
+            number: lastBlocks.lastProvedBlockNumber.toBigInt().toString(),
+          },
+        },
+        validators: {
+          root: validators.root.toJSON(),
+          hash: validators.hash.toJSON(),
+          count: validators.count.toBigint().toString(),
+        },
+      };
       let blockAddress = startBlock;
       let block = new BlockContract(blockAddress, tokenId);
       let blockNumber = Number(block.blockNumber.get().toBigInt());
-      const data: {}[] = [];
+      const blocks: {}[] = [];
       while (count < MAX_BLOCKS && blockNumber > 0) {
         const root = block.root.get().toJSON();
         const storage = block.storage.get().toIpfsHash();
@@ -471,7 +496,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         const txsCount = flags.txsCount;
         const txsHash = block.txsHash.get().toJSON();
         const previousBlockAddress = block.previousBlock.get();
-        data.push({
+        blocks.push({
           blockNumber,
           blockAddress: blockAddress.toBase58(),
           root,
@@ -496,7 +521,16 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         blockNumber = Number(block.blockNumber.get().toBigInt());
         count++;
       }
-      return JSON.stringify(data, null, 2);
+      return JSON.stringify(
+        {
+          contractAddress: contractAddress.toBase58(),
+          startBlock: startBlock.toBase58(),
+          contractState,
+          blocks,
+        },
+        null,
+        2
+      );
     } catch (error) {
       console.error("Error in getBlocksInfo", error);
       return "Error in getBlocksInfo";
