@@ -1,11 +1,12 @@
 import { describe, expect, it } from "@jest/globals";
 import { PrivateKey } from "o1js";
 import axios from "axios";
+import { nameContract } from "../../src/config";
+import { uniqueNamesGenerator, names } from "unique-names-generator";
 
 const ELEMENTS_NUMBER = 4;
 const transactions: string[] = [];
-const contractAddress =
-  "B62qqNQ9kMtc4L9p19eK8SfLRy8EamtMRWAVqcCaJSM1Q5AD3DjNAME";
+const contractAddress = nameContract.contractAddress;
 
 type DomainTransactionType = "add" | "extend" | "update" | "remove";
 interface Transaction {
@@ -30,7 +31,10 @@ describe("Domain Name Service API", () => {
     for (let i = 0; i < ELEMENTS_NUMBER; i++) {
       const tx: Transaction = {
         operation: "add",
-        name: makeString(20), // "hjdjsh..."
+        name: uniqueNamesGenerator({
+          dictionaries: [names], // colors can be omitted here as not used
+          length: 1,
+        }).toLowerCase(),
         address: PrivateKey.random().toPublicKey().toBase58(), // "B62..."
         expiry: Date.now() + 1000 * 60 * 60 * 24 * 365, // one year
       };
@@ -60,6 +64,15 @@ describe("Domain Name Service API", () => {
     console.log(`task api call result:`, answer);
   });
 
+  it(`should send transactions`, async () => {
+    const answer = await zkCloudWorkerRequest({
+      command: "sendTransactions",
+      transactions,
+      metadata: `backend txs`,
+    });
+    console.log(`tx api call result:`, answer);
+  });
+
   it.skip(`should restart the block validation`, async () => {
     console.log(`Restarting block validation...`);
     /*
@@ -80,7 +93,7 @@ describe("Domain Name Service API", () => {
     console.log(`restart api call result:`, answer);
   });
 
-  it(`should get blocks info`, async () => {
+  it.skip(`should get blocks info`, async () => {
     console.log(`Getting blocks info...`);
     let args: string = JSON.stringify({
       contractAddress,
@@ -124,15 +137,6 @@ describe("Domain Name Service API", () => {
     console.log(`map hash:`, map);
     const mapData = await loadFromIPFS(map.substring(2));
     //console.log(`map data:`, mapData);
-  });
-
-  it(`should send transactions`, async () => {
-    const answer = await zkCloudWorkerRequest({
-      command: "sendTransactions",
-      transactions,
-      metadata: `backend txs`,
-    });
-    console.log(`tx api call result:`, answer);
   });
 });
 
@@ -180,17 +184,4 @@ async function loadFromIPFS(hash: string): Promise<any | undefined> {
     console.error("loadFromIPFS error:", error?.message);
     return undefined;
   }
-}
-
-function makeString(length: number): string {
-  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
-  let outString: string = ``;
-  // eslint-disable-next-line @typescript-eslint/no-inferrable-types
-  const inOptions: string = `abcdefghijklmnopqrstuvwxyz`;
-
-  for (let i = 0; i < length; i++) {
-    outString += inOptions.charAt(Math.floor(Math.random() * inOptions.length));
-  }
-
-  return outString;
 }

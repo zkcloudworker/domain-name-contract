@@ -1,15 +1,18 @@
+import { describe, expect, it } from "@jest/globals";
+//import { ValidatorsVoting } from "../src/rollup/validators";
 import {
-  Struct,
-  Field,
-  PublicKey,
-  Signature,
+  Cache,
   ZkProgram,
+  Field,
+  MerkleWitness,
+  Struct,
+  PublicKey,
+  UInt64,
+  Provable,
+  UInt32,
+  Signature,
   Poseidon,
   SelfProof,
-  UInt32,
-  Provable,
-  UInt64,
-  MerkleWitness,
 } from "o1js";
 
 export const ValidatorDecisionType = {
@@ -105,7 +108,7 @@ export class ValidatorsDecisionState extends Struct({
   }
 }
 
-export const ValidatorsVoting = ZkProgram({
+const ValidatorsVoting = ZkProgram({
   name: "ValidatorsVoting",
   publicInput: ValidatorsDecisionState,
 
@@ -173,4 +176,12 @@ export const ValidatorsVoting = ZkProgram({
   },
 });
 
-export class ValidatorsVotingProof extends ZkProgram.Proof(ValidatorsVoting) {}
+describe("Validators", () => {
+  it(`should compile Validators`, async () => {
+    console.log("Compiling Validators...");
+    console.time("compiled Validators");
+    const cache: Cache = Cache.FileSystem("./cache");
+    await ValidatorsVoting.compile({ cache });
+    console.timeEnd("compiled Validators");
+  });
+});

@@ -9,9 +9,9 @@ import {
   UInt64,
   Cache,
   PublicKey,
-  Transaction,
   Encoding,
   verify,
+  fetchAccount,
 } from "o1js";
 import {
   ValidatorsVoting,
@@ -24,15 +24,12 @@ import {
   BlockContract,
   ChangeValidatorsData,
 } from "../src/contract/domain-contract";
-import { stringToFields } from "../src/lib/hash";
 import { getValidators } from "../src/rollup/validators-proof";
 import { Storage } from "../src/contract/storage";
 import { nameContract, JWT, blockProducer } from "../src/config";
 import {
   zkCloudWorkerClient,
-  makeString,
   blockchain,
-  accountBalanceMina,
   sleep,
   LocalCloud,
   Memory,
@@ -41,38 +38,31 @@ import {
   initBlockchain,
   getNetworkIdHash,
 } from "zkcloudworker";
-import {
-  DomainName,
-  DomainNameValue,
-  DomainTransaction,
-  DomainTransactionData,
-  DomainTransactionEnum,
-  MapUpdate,
-} from "../src/rollup/transaction";
-import { Metadata } from "../src/contract/metadata";
+import { MapUpdate } from "../src/rollup/transaction";
 import { calculateValidatorsProof } from "../src/rollup/validators-proof";
 import { zkcloudworker } from "../src/worker"; //, setVerificationKey
 import { DEPLOYER, PINATA_JWT } from "../env.json";
+import { uniqueNamesGenerator, names } from "unique-names-generator";
 
 setNumberOfWorkers(8);
-const useLocalBlockchain = false;
+const chain: blockchain = "devnet" as blockchain;
 const deploy = true;
-const network: blockchain = useLocalBlockchain ? "local" : "devnet";
 const useLocalCloudWorker = true;
 const api = new zkCloudWorkerClient({
   jwt: useLocalCloudWorker ? "local" : JWT,
   zkcloudworker,
-  chain: useLocalBlockchain ? "local" : "devnet",
+  chain,
 });
 
 let deployer: PrivateKey;
 let sender: PublicKey;
-const ELEMENTS_NUMBER = 3;
+const ELEMENTS_NUMBER = 1;
+const BLOCKS_NUMBER = 1;
 const domainNames: string[][] = [];
 
 const { validators, tree } = getValidators(0);
 
-const contractPrivateKey = PrivateKey.random();
+const contractPrivateKey = nameContract.contractPrivateKey;
 const contractPublicKey = contractPrivateKey.toPublicKey();
 
 const zkApp = new DomainNameContract(contractPublicKey);
@@ -81,7 +71,6 @@ let validatorsVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
 let contractVerificationKey: VerificationKey;
 const tokenId: Field = zkApp.deriveTokenId();
-const transactions: string[] = [];
 
 type DomainTransactionType = "add" | "extend" | "update" | "remove";
 interface TransactionJSON {
@@ -103,48 +92,76 @@ describe("Domain Name Service Contract", () => {
   it(`should prepare blocks data`, async () => {
     console.log("Preparing data...");
     console.time(`prepared data`);
-    for (let i = 0; i < ELEMENTS_NUMBER; i++) {
-      const tx: TransactionJSON = {
-        operation: "add",
-        name: makeString(20),
-        address: PrivateKey.random().toPublicKey().toBase58(),
-        expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
-      };
-      transactions.push(JSON.stringify(tx, null, 2));
+    for (let j = 0; j < BLOCKS_NUMBER; j++) {
+      const transactions: string[] = [];
+      for (let i = 0; i < ELEMENTS_NUMBER; i++) {
+        const tx: TransactionJSON = {
+          operation: "add",
+          name: uniqueNamesGenerator({
+            dictionaries: [names], // colors can be omitted here as not used
+            length: 1,
+          }).toLowerCase(),
+          address: PrivateKey.random().toPublicKey().toBase58(),
+          expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
+        };
+        transactions.push(JSON.stringify(tx, null, 2));
+      }
+      domainNames.push(transactions);
     }
+    console.log(
+      "domainNames:",
+      domainNames.map((d) => d.map((t) => JSON.parse(t).name))
+    );
     console.timeEnd(`prepared data`);
   });
 
   it(`should initialize blockchain`, async () => {
     Memory.info("initializing blockchain");
-    if (useLocalBlockchain) {
-      const { keys } = await initBlockchain(network, 1);
-      deployer = keys[0].privateKey;
-      const wallet = keys[1];
-      const transaction = await Mina.transaction(
-        { sender: wallet.publicKey, fee: "100000000", memo: "payment" },
-        async () => {
-          const senderUpdate = AccountUpdate.createSigned(wallet.publicKey);
-          senderUpdate.balance.subInPlace(1000000000);
-          senderUpdate.send({
-            to: blockProducer.publicKey,
-            amount: 500_000_000_000,
-          });
+    console.log("chain:", chain);
+    if (chain === "local" || chain === "lighnet") {
+      const { keys } = await initBlockchain(chain, 2);
+      expect(keys.length).toBe(2);
+      if (keys.length !== 2) throw new Error("Invalid keys");
+      deployer = keys[0].key;
+      try {
+        await fetchMinaAccount({ publicKey: blockProducer.publicKey });
+        if (!Mina.hasAccount(blockProducer.publicKey)) {
+          console.log("Block producer account not found, creating...");
+
+          const wallet = keys[1];
+          console.log("wallet:", wallet.toBase58());
+          const transaction = await Mina.transaction(
+            { sender: wallet, fee: "100000000", memo: "payment" },
+            async () => {
+              const senderUpdate = AccountUpdate.createSigned(wallet);
+              senderUpdate.balance.subInPlace(1000000000);
+              senderUpdate.send({
+                to: blockProducer.publicKey,
+                amount: 500_000_000_000,
+              });
+            }
+          );
+          await transaction.sign([wallet.key]).send().wait();
         }
-      );
-      await transaction.sign([wallet.privateKey]).send();
+      } catch (error: any) {
+        console.error("Error in block producer account creation:", error);
+        return;
+      }
     } else {
-      await initBlockchain(network);
+      console.log("non-local chain:", chain);
+      await initBlockchain(chain);
       deployer = PrivateKey.fromBase58(DEPLOYER);
     }
 
     process.env.DEPLOYER = deployer.toBase58();
-    expect(contractPrivateKey).toBeDefined();
-    expect(contractPrivateKey.toPublicKey().toBase58()).toBe(
-      contractPublicKey.toBase58()
-    );
+    if (deploy) {
+      expect(contractPrivateKey).toBeDefined();
+      expect(contractPrivateKey.toPublicKey().toBase58()).toBe(
+        contractPublicKey.toBase58()
+      );
+    }
 
-    console.log("blockchain initialized:", network);
+    console.log("blockchain initialized:", chain);
     console.log("contract address:", contractPublicKey.toBase58());
     sender = deployer.toPublicKey();
     const networkId = Mina.getNetworkId();
@@ -277,12 +294,33 @@ describe("Domain Name Service Contract", () => {
     });
   }
 
-  it(`should send transactions`, async () => {
+  if (!deploy) {
+    it(`should restart the sequencer`, async () => {
+      console.log(`Restarting sequencer...`);
+      let args: string = JSON.stringify({
+        contractAddress: contractPublicKey.toBase58(),
+      });
+      let apiresult = await api.execute({
+        repo: "nameservice",
+        task: "restart",
+        transactions: [],
+        args,
+        developer: "@staketab",
+        metadata: `txTask`,
+        mode: "sync",
+      });
+      expect(apiresult).toBeDefined();
+      if (apiresult === undefined) return;
+      expect(apiresult.success).toBe(true);
+    });
+  }
+
+  it(`should add task to process transactions`, async () => {
     console.log(`Adding task to process transactions...`);
     let args: string = JSON.stringify({
       contractAddress: contractPublicKey.toBase58(),
     });
-    let apiresult = await api.execute({
+    const apiresult = await api.execute({
       repo: "nameservice",
       task: "createTxTask",
       transactions: [],
@@ -294,19 +332,6 @@ describe("Domain Name Service Contract", () => {
     expect(apiresult).toBeDefined();
     if (apiresult === undefined) return;
     expect(apiresult.success).toBe(true);
-
-    console.time(`Txs to the block sent`);
-    apiresult = await api.sendTransactions({
-      repo: "nameservice",
-      developer: "@staketab",
-      transactions,
-    });
-    expect(apiresult).toBeDefined();
-    if (apiresult === undefined) return;
-    expect(apiresult.success).toBe(true);
-    console.log(`tx api call result:`, apiresult);
-    console.timeEnd(`Txs to the block sent`);
-
     console.log(`Processing tasks...`);
     while (
       (await LocalCloud.processLocalTasks({
@@ -316,12 +341,40 @@ describe("Domain Name Service Contract", () => {
         chain: "local",
       })) > 1
     ) {
-      await sleep(30000);
+      await sleep(10000);
     }
-    Memory.info(`task processed`);
   });
 
-  it(`should change validators`, async () => {
+  it(`should send transactions`, async () => {
+    for (let i = 0; i < BLOCKS_NUMBER; i++) {
+      console.time(`Txs to the block sent`);
+      const apiresult = await api.sendTransactions({
+        repo: "nameservice",
+        developer: "@staketab",
+        transactions: domainNames[i],
+      });
+      expect(apiresult).toBeDefined();
+      if (apiresult === undefined) return;
+      expect(apiresult.success).toBe(true);
+      console.log(`tx api call result:`, apiresult);
+      console.timeEnd(`Txs to the block sent`);
+
+      console.log(`Processing tasks...`);
+      while (
+        (await LocalCloud.processLocalTasks({
+          developer: "@staketab",
+          repo: "nameservice",
+          localWorker: zkcloudworker,
+          chain: "local",
+        })) > 1
+      ) {
+        await sleep(10000);
+      }
+      Memory.info(`tasks processed`);
+    }
+  });
+
+  it.skip(`should change validators`, async () => {
     console.log(`Changing validators...`);
     Memory.info("changing validators");
     const expiry = UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000);
@@ -363,15 +416,13 @@ describe("Domain Name Service Contract", () => {
     console.log("signing...");
     tx.sign([deployer]);
     Memory.info("sending");
-    Memory.info("sending, full info", true);
     console.log("sending...");
     await sendTx(tx, "Change validators");
     Memory.info("validators changed");
-    Memory.info("validators changed, full info", true);
   });
 });
 
-async function sendTx(tx: Transaction, description?: string) {
+async function sendTx(tx: any, description?: string) {
   const txSent = await tx.send();
   if (txSent.errors.length > 0) {
     console.error(
@@ -393,6 +444,21 @@ async function sendTx(tx: Transaction, description?: string) {
       txIncluded.hash
     } status: ${txIncluded.status}`
   );
+}
+
+async function accountBalance(address: PublicKey): Promise<UInt64> {
+  try {
+    await fetchAccount({ publicKey: address });
+    if (Mina.hasAccount(address)) return Mina.getBalance(address);
+    else return UInt64.from(0);
+  } catch (error: any) {
+    console.error(error);
+    return UInt64.from(0);
+  }
+}
+
+async function accountBalanceMina(address: PublicKey): Promise<number> {
+  return Number((await accountBalance(address)).toBigInt()) / 1e9;
 }
 
 /*

@@ -18,9 +18,10 @@
   "dependencies": {
     "adm-zip": "^0.5.12",
     "axios": "^1.6.8",
-    "o1js": "^0.18.0",
+    "o1js": "^1.0.1",
     "tslib": "^2.6.2",
-    "zkcloudworker": "^0.3.16"
+    "unique-names-generator": "^4.7.1",
+    "zkcloudworker": "^0.4.1"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
@@ -36,6 +37,7 @@
     "testEnvironment": "node",
     "slowTestThreshold": 1500,
     "testTimeout": 10800000,
+    "bail": true,
     "verbose": true,
     "roots": [
       "tests"

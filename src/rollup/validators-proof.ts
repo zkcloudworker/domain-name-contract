@@ -6,6 +6,7 @@ import {
   UInt32,
   VerificationKey,
   verify,
+  MerkleTree,
 } from "o1js";
 import { validatorsPrivateKeys } from "../config";
 import {
@@ -15,7 +16,6 @@ import {
   ValidatorsVotingProof,
   ValidatorWitness,
 } from "./validators";
-import { MerkleTree } from "../lib/merkle-tree";
 import { ValidatorsState } from "../contract/domain-contract";
 
 export function getValidators(count: number) {
