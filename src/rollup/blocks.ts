@@ -1,4 +1,4 @@
-import { Field, UInt32, UInt64 } from "o1js";
+import { Field, UInt32, UInt64, MerkleMap } from "o1js";
 import {
   MapUpdateData,
   MapTransition,
@@ -6,15 +6,22 @@ import {
   DomainTransactionData,
   DomainTransactionType,
   DomainCloudTransactionData,
+  DomainName,
 } from "./transaction";
-import { MerkleMap } from "../lib/merkle-map";
 import { DomainDatabase } from "./database";
 import { serializeFields } from "../lib/fields";
+import { stringFromFields } from "../lib/hash";
 
-function isAccepted(element: DomainTransactionData, time: UInt64): boolean {
+function isAccepted(
+  element: DomainTransactionData,
+  time: UInt64,
+  map: MerkleMap
+): { accepted: boolean; reason?: string } {
   if (element.txType() === "update") {
-    if (element.oldDomain === undefined) return false;
-    if (element.signature === undefined) return false;
+    if (element.oldDomain === undefined)
+      return { accepted: false, reason: "no old domain" };
+    if (element.signature === undefined)
+      return { accepted: false, reason: "no signature" };
     if (
       element.signature
         .verify(
@@ -23,25 +30,37 @@ function isAccepted(element: DomainTransactionData, time: UInt64): boolean {
         )
         .toBoolean() === false
     )
-      return false;
+      return { accepted: false, reason: "invalid signature" };
   }
 
   if (element.txType() === "extend") {
-    if (element.oldDomain === undefined) return false;
+    if (element.oldDomain === undefined)
+      return { accepted: false, reason: "no old domain" };
     if (
       element.tx.domain.data.expiry
         .greaterThan(element.oldDomain!.data.expiry)
         .toBoolean() === false
     )
-      return false;
+      return {
+        accepted: false,
+        reason: "new expiry date is before the old expiry date",
+      };
   }
 
   if (element.txType() === "remove") {
     if (element.tx.domain.data.expiry.greaterThan(time).toBoolean() === true)
-      return false;
+      return {
+        accepted: false,
+        reason: "the domain name is not expired yet, cannot remove",
+      };
   }
 
-  return true;
+  if (element.txType() === "add") {
+    if (map.get(element.tx.domain.name).equals(Field(0)).toBoolean() === false)
+      return { accepted: false, reason: "the name already registered" };
+  }
+
+  return { accepted: true };
 }
 
 export function createBlock(params: {
@@ -83,7 +102,9 @@ export function createBlock(params: {
     const hash = element.tx.hash();
     txsHash = txsHash.add(hash);
     const txType = element.txType();
-    if (isAccepted(element, time)) {
+    // TODO: check for duplicate names
+    const { accepted, reason } = isAccepted(element, time, map);
+    if (accepted) {
       tx.serializedTx.status = "accepted";
       const key = element.tx.domain.key();
       const value = txType === "remove" ? Field(0) : element.tx.domain.value();
@@ -108,8 +129,13 @@ export function createBlock(params: {
         });
       }
     } else {
+      console.log(
+        `Transaction rejected: ${reason}, name: ${stringFromFields([
+          element.tx.domain.name,
+        ])}`
+      );
       tx.serializedTx.status = "rejected";
-      tx.serializedTx.reason = "invalid request";
+      tx.serializedTx.reason = reason ?? "invalid request";
       if (calculateTransactions)
         updates.push({
           isElementAccepted: false,
@@ -137,11 +163,27 @@ export function createBlock(params: {
           : MapTransition.extend(update.update!, update.element.oldDomain!)
         : MapTransition.reject(update.oldRoot, time, update.element.tx);
       states.push(state);
-      const tx = {
-        isAccepted: update.isElementAccepted,
-        state: serializeFields(MapTransition.toFields(state)),
-        update: serializeFields(MapUpdateData.toFields(update.update!)),
-      };
+      const tx = update.isElementAccepted
+        ? {
+            time,
+            oldRoot: update.oldRoot.toJSON(),
+            type: update.type,
+            isAccepted: update.isElementAccepted,
+            state: serializeFields(MapTransition.toFields(state)),
+            update: serializeFields(MapUpdateData.toFields(update.update!)),
+            oldDomain: update.element.oldDomain
+              ? serializeFields(DomainName.toFields(update.element.oldDomain))
+              : undefined,
+            signature: update.element.signature?.toBase58(),
+          }
+        : {
+            time: time.toBigInt().toString(),
+            oldRoot: update.oldRoot.toJSON(),
+            type: update.type,
+            isAccepted: update.isElementAccepted,
+            state: serializeFields(MapTransition.toFields(state)),
+            tx: serializeFields(DomainTransaction.toFields(update.element.tx)),
+          };
       proofData.push(JSON.stringify(tx, null, 2));
     }
 

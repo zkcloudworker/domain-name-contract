@@ -1,5 +1,4 @@
-import { Field } from "o1js";
-import { MerkleMap } from "../lib/merkle-map";
+import { Field, MerkleMap } from "o1js";
 import { DomainName } from "./transaction";
 import { stringFromFields } from "../lib/hash";
 import { serializeFields, deserializeFields } from "../lib/fields";

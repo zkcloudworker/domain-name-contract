@@ -1,14 +1,6 @@
 import { Field, Poseidon } from "o1js";
 import { fieldToBase64, fieldFromBase64 } from "./base64";
 
-/*
-function convert(value: string, radix: number) {
-  return [...value.toString()].reduce(
-    (r, v) => r * BigInt(radix) + BigInt(parseInt(v, radix)),
-    0n
-  );
-}
-*/
 export function serializeFields(fields: Field[]): string {
   const hash = Poseidon.hash(fields);
   const value = [Field(fields.length), hash, ...fields];

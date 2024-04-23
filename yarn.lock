@@ -1459,11 +1459,12 @@ __metadata:
     adm-zip: "npm:^0.5.12"
     axios: "npm:^1.6.8"
     jest: "npm:^29.7.0"
-    o1js: "npm:^0.18.0"
+    o1js: "npm:^1.0.1"
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
     typescript: "npm:^5.4.5"
-    zkcloudworker: "npm:^0.3.16"
+    unique-names-generator: "npm:^4.7.1"
+    zkcloudworker: "npm:^0.4.1"
   languageName: unknown
   linkType: soft
 
@@ -2926,9 +2927,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"o1js@npm:^0.18.0":
-  version: 0.18.0
-  resolution: "o1js@npm:0.18.0"
+"o1js@npm:^1.0.1":
+  version: 1.0.1
+  resolution: "o1js@npm:1.0.1"
   dependencies:
     blakejs: "npm:1.2.1"
     cachedir: "npm:^2.4.0"
@@ -2938,7 +2939,7 @@ __metadata:
     tslib: "npm:^2.3.0"
   bin:
     snarky-run: src/build/run.js
-  checksum: 10c0/94e96feac3a560544b4c798abf8c0015a05b0cf36dd6c1f272f50768def9c2fcdd54ac0d1c4de0eb284dc27de49abc00fad5ef09e8a25f945a32381c3cd6d861
+  checksum: 10c0/1a541c2567065472f05675f02a5f2dc09cf4860f7e083a2789ea8959afc4ffae37fe78802dccb8349875b720c08282c001f9de4a207352d0ec848b121172b0d1
   languageName: node
   linkType: hard
 
@@ -3610,6 +3611,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"unique-names-generator@npm:^4.7.1":
+  version: 4.7.1
+  resolution: "unique-names-generator@npm:4.7.1"
+  checksum: 10c0/db07b9a0fee6eac4a21cf567c9744ee97895aa744d51ec913557205173a65c1a7a4d12470295796acb7247e6646e7975c340bb634c7adf41e5d950fa5cf94375
+  languageName: node
+  linkType: hard
+
 "unique-slug@npm:^4.0.0":
   version: 4.0.0
   resolution: "unique-slug@npm:4.0.0"
@@ -3788,13 +3796,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zkcloudworker@npm:^0.3.16":
-  version: 0.3.16
-  resolution: "zkcloudworker@npm:0.3.16"
+"zkcloudworker@npm:^0.4.1":
+  version: 0.4.1
+  resolution: "zkcloudworker@npm:0.4.1"
   dependencies:
     axios: "npm:^1.6.8"
   peerDependencies:
-    o1js: ^0.18.0
-  checksum: 10c0/feaabd877dd89a794a80365a179afc6767233445caae5f722ab6027d57b9ec27a5b763ebda01ba0bb8e7d91d56d431c1c399e99076a33691219a457f15abd866
+    o1js: ^1.0.1
+  checksum: 10c0/fb82e6522b84c7f270b3fa1a7a3f039c2d118f07b1c53cf84933f937fb99953bf80d410dd3b54a7316dc2996727cbb2dbf9b133be85d325fea42f092717877be
   languageName: node
   linkType: hard

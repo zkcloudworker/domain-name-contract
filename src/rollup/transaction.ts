@@ -10,11 +10,11 @@ import {
   UInt8,
   Signature,
   UInt32,
+  MerkleMapWitness,
 } from "o1js";
 import { Metadata } from "../contract/metadata";
 import { Storage } from "../contract/storage";
 import { serializeFields, deserializeFields } from "../lib/fields";
-import { MerkleMapWitness } from "../lib/merkle-map";
 
 export type DomainTransactionType = "add" | "extend" | "update" | "remove"; // removeExpired
 export type DomainTransactionStatus =
@@ -159,12 +159,19 @@ export interface DomainSerializedTransaction {
   };
   signature?: string;
 }
+
+export type DomainCloudTransactionStatus =
+  | "sent"
+  | "invalid"
+  | "pending"
+  | "accepted"
+  | "rejected";
 export interface DomainCloudTransaction {
   txId: string;
   transaction: string;
   timeReceived: number;
   fields?: string;
-  status: string;
+  status: DomainCloudTransactionStatus;
   reason?: string;
 }
 
@@ -196,13 +203,11 @@ export class MapTransition extends Struct({
 
     const [rootBefore, keyBefore] = update.witness.computeRootAndKey(Field(0));
     update.oldRoot.assertEquals(rootBefore);
-    // TODO: uncomment after https://github.com/o1-labs/o1js/issues/1552 is resolved
-    //key.assertEquals(keyBefore);
+    key.assertEquals(keyBefore);
 
     const [rootAfter, keyAfter] = update.witness.computeRootAndKey(value);
     update.newRoot.assertEquals(rootAfter);
-    // TODO: uncomment after https://github.com/o1-labs/o1js/issues/1552 is resolved
-    //key.assertEquals(keyAfter);
+    key.assertEquals(keyAfter);
 
     const hash = update.tx.hash();
 
