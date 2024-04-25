@@ -21,7 +21,7 @@
     "o1js": "^1.0.1",
     "tslib": "^2.6.2",
     "unique-names-generator": "^4.7.1",
-    "zkcloudworker": "^0.4.1"
+    "zkcloudworker": "^0.4.3"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",

@@ -74,6 +74,7 @@ export function createBlock(params: {
   root: Field;
   txsHash: Field;
   txsCount: UInt32;
+  invalidTxsCount: number;
   state: Field[];
   proofData: string[];
 } {
@@ -91,61 +92,70 @@ export function createBlock(params: {
 
   const oldRoot = map.getRoot();
   let txsHash = Field(0);
+  let invalidTxsCount = 0;
+  let txsCount = 0;
   const proofData: string[] = [];
   let state: Field[] = [];
   const updates: ElementState[] = [];
 
   for (const tx of elements) {
-    if (tx.domainData === undefined) continue;
-    const element = tx.domainData;
-    const root = map.getRoot();
-    const hash = element.tx.hash();
-    txsHash = txsHash.add(hash);
-    const txType = element.txType();
-    // TODO: check for duplicate names
-    const { accepted, reason } = isAccepted(element, time, map);
-    if (accepted) {
-      tx.serializedTx.status = "accepted";
-      const key = element.tx.domain.key();
-      const value = txType === "remove" ? Field(0) : element.tx.domain.value();
-      map.set(key, value);
-      if (txType === "remove") database.remove(key);
-      else database.insert(element.tx.domain);
-      if (calculateTransactions) {
-        const newRoot = map.getRoot();
-        const update = new MapUpdateData({
-          oldRoot: root,
-          newRoot,
-          time,
-          tx: element.tx,
-          witness: map.getWitness(key),
-        });
-        updates.push({
-          isElementAccepted: true,
-          update,
-          oldRoot: root,
-          type: txType,
-          element,
-        });
-      }
+    if (tx.domainData === undefined) {
+      invalidTxsCount++;
+      console.log("Invalid transaction", tx);
     } else {
-      console.log(
-        `Transaction rejected: ${reason}, name: ${stringFromFields([
-          element.tx.domain.name,
-        ])}`
-      );
-      tx.serializedTx.status = "rejected";
-      tx.serializedTx.reason = reason ?? "invalid request";
-      if (calculateTransactions)
-        updates.push({
-          isElementAccepted: false,
-          oldRoot: root,
-          type: txType,
-          element,
-        });
+      txsCount++;
+      const element = tx.domainData;
+      const root = map.getRoot();
+      const hash = element.tx.hash();
+      txsHash = txsHash.add(hash);
+      const txType = element.txType();
+      // TODO: check for duplicate names
+      const { accepted, reason } = isAccepted(element, time, map);
+      //console.log("Processing transaction", { tx, accepted, reason });
+      if (accepted) {
+        tx.serializedTx.status = "accepted";
+        const key = element.tx.domain.key();
+        const value =
+          txType === "remove" ? Field(0) : element.tx.domain.value();
+        map.set(key, value);
+        if (txType === "remove") database.remove(key);
+        else database.insert(element.tx.domain);
+        if (calculateTransactions) {
+          const newRoot = map.getRoot();
+          const update = new MapUpdateData({
+            oldRoot: root,
+            newRoot,
+            time,
+            tx: element.tx,
+            witness: map.getWitness(key),
+          });
+          updates.push({
+            isElementAccepted: true,
+            update,
+            oldRoot: root,
+            type: txType,
+            element,
+          });
+        }
+      } else {
+        console.log(
+          `Transaction rejected: ${reason}, name: ${stringFromFields([
+            element.tx.domain.name,
+          ])}`,
+          tx
+        );
+        tx.serializedTx.status = "rejected";
+        tx.serializedTx.reason = reason ?? "invalid request";
+        if (calculateTransactions)
+          updates.push({
+            isElementAccepted: false,
+            oldRoot: root,
+            type: txType,
+            element,
+          });
+      }
     }
   }
-
   if (calculateTransactions) {
     let states: MapTransition[] = [];
     for (const update of updates) {
@@ -196,12 +206,20 @@ export function createBlock(params: {
   }
 
   const root = map.getRoot();
+  console.log(
+    "Block calculated:",
+    txsCount,
+    "transactions",
+    "invalid:",
+    invalidTxsCount
+  );
   return {
     state,
     proofData,
     oldRoot,
     root,
-    txsCount: UInt32.from(elements.length),
+    txsCount: UInt32.from(txsCount),
+    invalidTxsCount,
     txsHash,
   };
 }

@@ -19,12 +19,28 @@ export const ValidatorDecisionType = {
   setValidators: Field(4),
 };
 
+export class ValidatorsState extends Struct({
+  root: Field,
+  hash: Field,
+  count: UInt32,
+}) {
+  static assertEquals(a: ValidatorsState, b: ValidatorsState) {
+    a.root.assertEquals(b.root);
+    a.hash.assertEquals(b.hash);
+    a.count.assertEquals(b.count);
+  }
+
+  pack(): Field {
+    return Poseidon.hash([this.root, this.hash, this.count.value]);
+  }
+}
+
 export class ValidatorWitness extends MerkleWitness(3) {}
 
 export class ValidatorsDecision extends Struct({
   contractAddress: PublicKey,
   chainId: Field, // chain id
-  validatorsRoot: Field,
+  validators: ValidatorsState,
   decisionType: Field,
   expiry: UInt64, // Unix time when decision expires
   data: Provable.Array(Field, 8),
@@ -32,7 +48,7 @@ export class ValidatorsDecision extends Struct({
   static assertEquals(a: ValidatorsDecision, b: ValidatorsDecision) {
     a.contractAddress.assertEquals(b.contractAddress);
     a.chainId.assertEquals(b.chainId);
-    a.validatorsRoot.assertEquals(b.validatorsRoot);
+    ValidatorsState.assertEquals(a.validators, b.validators);
     a.decisionType.assertEquals(b.decisionType);
     a.expiry.assertEquals(b.expiry);
     a.data[0].assertEquals(b.data[0]);
@@ -62,7 +78,7 @@ export class ValidatorsDecisionState extends Struct({
       .verify(validatorAddress, ValidatorsDecision.toFields(decision))
       .assertTrue("Wrong validator signature");
     const root = witness.calculateRoot(hash);
-    decision.validatorsRoot.assertEquals(root);
+    decision.validators.root.assertEquals(root);
     return new ValidatorsDecisionState({
       decision,
       count: UInt32.from(1),
@@ -77,7 +93,7 @@ export class ValidatorsDecisionState extends Struct({
   ) {
     const hash = Poseidon.hashPacked(PublicKey, validatorAddress);
     const root = witness.calculateRoot(hash);
-    decision.validatorsRoot.assertEquals(root);
+    decision.validators.root.assertEquals(root);
     return new ValidatorsDecisionState({
       decision,
       count: UInt32.from(1),

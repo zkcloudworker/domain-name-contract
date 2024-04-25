@@ -5,7 +5,9 @@ import axios from "axios";
 const ELEMENTS_NUMBER = 4;
 const transactions: string[] = [];
 const contractAddress =
-  "B62qmyBYvHL5g7os2HFcGJC1QASTkFC8ydUBZRKGrxDqhV853YoNAME"; // new contract with o1js v1.0.1
+  "B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME"; // added lastValidatedBlock and invalidTxsCount
+//  "B62qrR3kE3S9xsQy2Jq8tp3TceWDeAmiXhU4KCXh19HzAVPj7BiNAME"; // new contract with o1js v1.0.1 and error handling
+//  "B62qmyBYvHL5g7os2HFcGJC1QASTkFC8ydUBZRKGrxDqhV853YoNAME"; // new contract with o1js v1.0.1
 // "B62qqNQ9kMtc4L9p19eK8SfLRy8EamtMRWAVqcCaJSM1Q5AD3DjNAME"; - old contract with o1js 0.18.0
 
 type DomainTransactionType = "add" | "extend" | "update" | "remove";
