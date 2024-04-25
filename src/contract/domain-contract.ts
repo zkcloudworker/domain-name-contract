@@ -17,14 +17,17 @@ import {
   MerkleMap,
   UInt32,
   Provable,
+  Poseidon,
 } from "o1js";
 import { Storage } from "./storage";
 import {
   ValidatorDecisionType,
   ValidatorsVotingProof,
+  ValidatorsState,
 } from "../rollup/validators";
 import { MapUpdateProof, MapTransition } from "../rollup/transaction";
 import { getNetworkIdHash } from "zkcloudworker";
+import { p } from "o1js/dist/node/bindings/crypto/finite-field";
 
 export class BlockParams extends Struct({
   txsCount: UInt32,
@@ -85,18 +88,6 @@ export class BadBlockValidationData extends Struct({
   notUsed: Provable.Array(Field, 6),
 }) {}
 
-export class ValidatorsState extends Struct({
-  root: Field,
-  hash: Field,
-  count: UInt32,
-}) {
-  static assertEquals(a: ValidatorsState, b: ValidatorsState) {
-    a.root.assertEquals(b.root);
-    a.hash.assertEquals(b.hash);
-    a.count.assertEquals(b.count);
-  }
-}
-
 export class ChangeValidatorsData extends Struct({
   new: ValidatorsState,
   old: ValidatorsState,
@@ -124,61 +115,36 @@ export class BlockData extends Struct({
   }
 }
 
-export class LastBlocksPacked extends Struct({
-  lastBlockAddressX: Field,
-  lastValidatedBlockAddressX: Field,
-  lastProvedBlockAddressX: Field,
+export class LastBlockPacked extends Struct({
+  x: Field,
   data: Field,
 }) {}
 
-export class LastBlocks extends Struct({
-  lastBlockAddress: PublicKey,
-  lastValidatedBlockAddress: PublicKey,
-  lastProvedBlockAddress: PublicKey,
-  lastBlockNumber: UInt64,
-  lastValidatedBlockNumber: UInt64,
-  lastProvedBlockNumber: UInt64,
+export class LastBlock extends Struct({
+  address: PublicKey,
+  blockNumber: UInt64,
 }) {
-  pack(): LastBlocksPacked {
-    return new LastBlocksPacked({
-      lastBlockAddressX: this.lastBlockAddress.x,
-      lastValidatedBlockAddressX: this.lastValidatedBlockAddress.x,
-      lastProvedBlockAddressX: this.lastProvedBlockAddress.x,
+  pack(): LastBlockPacked {
+    return new LastBlockPacked({
+      x: this.address.x,
       data: Field.fromBits([
-        ...this.lastBlockNumber.value.toBits(64),
-        ...this.lastValidatedBlockNumber.value.toBits(64),
-        ...this.lastProvedBlockNumber.value.toBits(64),
-        this.lastBlockAddress.isOdd,
-        this.lastValidatedBlockAddress.isOdd,
-        this.lastProvedBlockAddress.isOdd,
+        ...this.blockNumber.value.toBits(64),
+        this.address.isOdd,
       ]),
     });
   }
 
-  static unpack(packed: LastBlocksPacked): LastBlocks {
-    const bits = packed.data.toBits(64 * 3 + 3);
-    const lastBlockNumber = UInt64.from(0);
-    const lastValidatedBlockNumber = UInt64.from(0);
-    const lastProvedBlockNumber = UInt64.from(0);
-    lastBlockNumber.value = Field.fromBits(bits.slice(0, 64));
-    lastValidatedBlockNumber.value = Field.fromBits(bits.slice(64, 128));
-    lastProvedBlockNumber.value = Field.fromBits(bits.slice(128, 192));
-    return new LastBlocks({
-      lastBlockAddress: PublicKey.from({
-        x: packed.lastBlockAddressX,
-        isOdd: bits[192],
-      }),
-      lastValidatedBlockAddress: PublicKey.from({
-        x: packed.lastValidatedBlockAddressX,
-        isOdd: bits[193],
-      }),
-      lastProvedBlockAddress: PublicKey.from({
-        x: packed.lastProvedBlockAddressX,
-        isOdd: bits[194],
-      }),
-      lastBlockNumber,
-      lastValidatedBlockNumber,
-      lastProvedBlockNumber,
+  static unpack(packed: LastBlockPacked): LastBlock {
+    const bits = packed.data.toBits(64 + 1);
+    const address = PublicKey.from({
+      x: packed.x,
+      isOdd: bits[64],
+    });
+    const blockNumber = UInt64.from(0);
+    blockNumber.value = Field.fromBits(bits.slice(0, 64));
+    return new LastBlock({
+      address,
+      blockNumber,
     });
   }
 }
@@ -279,8 +245,10 @@ export class BlockContract extends SmartContract {
 
 export class DomainNameContract extends TokenContract {
   @state(Field) domain = State<Field>();
-  @state(ValidatorsState) validators = State<ValidatorsState>();
-  @state(LastBlocksPacked) blocks = State<LastBlocksPacked>();
+  @state(Field) validatorsPacked = State<Field>();
+  @state(LastBlockPacked) lastCreatedBlock = State<LastBlockPacked>();
+  @state(LastBlockPacked) lastValidatedBlock = State<LastBlockPacked>();
+  @state(LastBlockPacked) lastProvedBlock = State<LastBlockPacked>();
 
   async deploy(args: DeployArgs) {
     super.deploy(args);
@@ -292,14 +260,22 @@ export class DomainNameContract extends TokenContract {
 
   init() {
     super.init();
-    this.blocks.set(
-      new LastBlocks({
-        lastBlockAddress: PublicKey.empty(),
-        lastValidatedBlockAddress: PublicKey.empty(),
-        lastProvedBlockAddress: PublicKey.empty(),
-        lastBlockNumber: UInt64.from(0),
-        lastValidatedBlockNumber: UInt64.from(0),
-        lastProvedBlockNumber: UInt64.from(0),
+    this.lastCreatedBlock.set(
+      new LastBlock({
+        address: PublicKey.empty(),
+        blockNumber: UInt64.from(0),
+      }).pack()
+    );
+    this.lastValidatedBlock.set(
+      new LastBlock({
+        address: PublicKey.empty(),
+        blockNumber: UInt64.from(0),
+      }).pack()
+    );
+    this.lastProvedBlock.set(
+      new LastBlock({
+        address: PublicKey.empty(),
+        blockNumber: UInt64.from(0),
       }).pack()
     );
   }
@@ -336,11 +312,13 @@ export class DomainNameContract extends TokenContract {
     decision.blockAddress.assertEquals(data.blockAddress);
     decision.blockProducer.assertEquals(blockProducer);
     decision.previousBlockAddress.assertEquals(data.previousBlockAddress);
-    const blocks = LastBlocks.unpack(this.blocks.getAndRequireEquals());
-    blocks.lastBlockAddress.equals(PublicKey.empty()).assertFalse();
-    data.previousBlockAddress.assertEquals(blocks.lastBlockAddress);
-    data.blockNumber.assertEquals(blocks.lastBlockNumber.add(UInt64.from(1)));
-    const previousBlock = new BlockContract(blocks.lastBlockAddress, tokenId);
+    const lastBlock = LastBlock.unpack(
+      this.lastCreatedBlock.getAndRequireEquals()
+    );
+    lastBlock.address.equals(PublicKey.empty()).assertFalse();
+    data.previousBlockAddress.assertEquals(lastBlock.address);
+    data.blockNumber.assertEquals(lastBlock.blockNumber.add(UInt64.from(1)));
+    const previousBlock = new BlockContract(lastBlock.address, tokenId);
     const oldRoot = previousBlock.root.get(); // TODO: change to getAndRequireEquals() after o1js bug fix https://github.com/o1-labs/o1js/issues/1245
     decision.oldRoot.assertEquals(oldRoot);
     const blockNumber = previousBlock.blockNumber.get().add(UInt64.from(1));
@@ -348,6 +326,9 @@ export class DomainNameContract extends TokenContract {
     const previousBlockParams = BlockParams.unpack(
       previousBlock.blockParams.get()
     );
+    previousBlockParams.isValidated
+      .or(previousBlockParams.isFinal)
+      .assertTrue();
     const blockParams = BlockParams.unpack(data.blockParams);
     previousBlockParams.timeCreated.assertLessThan(blockParams.timeCreated);
     AccountUpdate.create(data.blockAddress, tokenId)
@@ -381,15 +362,20 @@ export class DomainNameContract extends TokenContract {
       { isSome: Bool(true), value: state[7] },
     ];
     this.emitEvent("newBlock", data);
-    blocks.lastBlockAddress = data.blockAddress;
-    blocks.lastBlockNumber = data.blockNumber;
-    this.blocks.set(blocks.pack());
+    this.lastCreatedBlock.set(
+      new LastBlock({
+        address: data.blockAddress,
+        blockNumber: data.blockNumber,
+      }).pack()
+    );
   }
 
   @method async blockZero(publicKey: PublicKey, timeCreated: UInt64) {
     // TODO: check timeCreated
-    const blocks = LastBlocks.unpack(this.blocks.getAndRequireEquals());
-    blocks.lastBlockAddress.equals(PublicKey.empty()).assertTrue();
+    const lastBlock = LastBlock.unpack(
+      this.lastCreatedBlock.getAndRequireEquals()
+    );
+    lastBlock.address.equals(PublicKey.empty()).assertTrue();
     const tokenId = this.deriveTokenId();
     this.internal.mint({
       address: publicKey,
@@ -423,14 +409,22 @@ export class DomainNameContract extends TokenContract {
       { isSome: Bool(true), value: state[6] },
       { isSome: Bool(true), value: state[7] },
     ];
-    this.blocks.set(
-      new LastBlocks({
-        lastBlockAddress: publicKey,
-        lastValidatedBlockAddress: publicKey,
-        lastProvedBlockAddress: publicKey,
-        lastBlockNumber: UInt64.from(0),
-        lastValidatedBlockNumber: UInt64.from(0),
-        lastProvedBlockNumber: UInt64.from(0),
+    this.lastCreatedBlock.set(
+      new LastBlock({
+        address: publicKey,
+        blockNumber: UInt64.from(0),
+      }).pack()
+    );
+    this.lastProvedBlock.set(
+      new LastBlock({
+        address: publicKey,
+        blockNumber: UInt64.from(0),
+      }).pack()
+    );
+    this.lastValidatedBlock.set(
+      new LastBlock({
+        address: publicKey,
+        blockNumber: UInt64.from(0),
       }).pack()
     );
     this.emitEvent("newBlock", data);
@@ -447,10 +441,9 @@ export class DomainNameContract extends TokenContract {
     );
     const block = new BlockContract(data.blockAddress, tokenId);
     const blockNumber = await block.validateBlock(data, tokenId);
-    const blocks = LastBlocks.unpack(this.blocks.getAndRequireEquals());
-    blocks.lastValidatedBlockAddress = data.blockAddress;
-    blocks.lastValidatedBlockNumber = blockNumber;
-    this.blocks.set(blocks.pack());
+    this.lastValidatedBlock.set(
+      new LastBlock({ address: data.blockAddress, blockNumber }).pack()
+    );
     this.emitEvent("validatedBlock", data.blockAddress);
   }
 
@@ -480,10 +473,9 @@ export class DomainNameContract extends TokenContract {
     const tokenId = this.deriveTokenId();
     const block = new BlockContract(blockAddress, tokenId);
     const blockNumber = await block.proveBlock(transition, tokenId);
-    const blocks = LastBlocks.unpack(this.blocks.getAndRequireEquals());
-    blocks.lastProvedBlockAddress = blockAddress;
-    blocks.lastProvedBlockNumber = blockNumber;
-    this.blocks.set(blocks.pack());
+    this.lastProvedBlock.set(
+      new LastBlock({ address: blockAddress, blockNumber }).pack()
+    );
   }
 
   @method async badBlock(proof: ValidatorsVotingProof) {
@@ -504,13 +496,15 @@ export class DomainNameContract extends TokenContract {
     proof.publicInput.decision.decisionType.assertEquals(
       ValidatorDecisionType.setValidators
     );
-    const old = this.validators.getAndRequireEquals();
+    const old = this.validatorsPacked.getAndRequireEquals();
     const data = ChangeValidatorsData.fromFields(
       proof.publicInput.decision.data
     );
-    ValidatorsState.assertEquals(data.old, old);
-    proof.publicInput.count.assertGreaterThan(old.count.mul(UInt32.from(2)));
-    this.validators.set(data.new);
+    data.old.pack().assertEquals(old);
+    proof.publicInput.count.assertGreaterThan(
+      data.old.count.mul(UInt32.from(2))
+    );
+    this.validatorsPacked.set(data.new.pack());
     this.emitEvent("setValidators", data);
   }
 
@@ -521,10 +515,10 @@ export class DomainNameContract extends TokenContract {
     // and use this.network.timestamp.requireBetween()
     //const timestamp = this.network.timestamp.getAndRequireEquals();
     //timestamp.assertLessThan(proof.publicInput.decision.expiry);
-    const validators = this.validators.getAndRequireEquals();
     proof.verify();
+    const validators = proof.publicInput.decision.validators;
+    validators.pack().assertEquals(this.validatorsPacked.getAndRequireEquals());
     proof.publicInput.hash.assertEquals(validators.hash);
-    proof.publicInput.decision.validatorsRoot.assertEquals(validators.root);
     proof.publicInput.count.assertGreaterThan(validators.count);
     proof.publicInput.decision.contractAddress.assertEquals(this.address);
   }

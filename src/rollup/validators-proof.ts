@@ -15,8 +15,8 @@ import {
   ValidatorsVoting,
   ValidatorsVotingProof,
   ValidatorWitness,
+  ValidatorsState,
 } from "./validators";
-import { ValidatorsState } from "../contract/domain-contract";
 
 export function getValidators(count: number) {
   const tree = new MerkleTree(3);

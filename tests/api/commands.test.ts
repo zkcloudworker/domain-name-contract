@@ -39,11 +39,12 @@ describe("Domain Name Service API", () => {
         expiry: Date.now() + 1000 * 60 * 60 * 24 * 365, // one year
       };
       transactions.push(JSON.stringify(tx, null, 2));
+      //transactions.push(tx);
     }
     console.timeEnd(`prepared data`);
   });
 
-  it.skip(`should add task to process transactions`, async () => {
+  it(`should add task to process transactions`, async () => {
     console.log(`Adding task to process transactions...`);
     /*
       adding task to process transactions
@@ -110,7 +111,7 @@ describe("Domain Name Service API", () => {
     if (!answer.success) return;
 
     let data = JSON.parse(answer.result);
-    console.log(`last 10 blocks data:`, data, data?.contractState?.lastBlocks);
+    console.log(`contract state:`, data?.contractState);
 
     /*
     const hash = data.blocks[data.blocks.length - 1].ipfs;

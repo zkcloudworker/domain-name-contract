@@ -8,13 +8,15 @@ import {
   PublicKey,
   fetchAccount,
   Cache,
+  Encoding,
+  UInt64,
 } from "o1js";
 import {
   DomainNameContract,
   BlockContract,
 } from "../../src/contract/domain-contract";
 import { ValidatorsVoting } from "../../src/rollup/validators";
-import { getValidatorsTreeAndHash } from "../../src/rollup/validators-proof";
+import { getValidators } from "../../src/rollup/validators-proof";
 import { nameContract } from "../../src/config";
 import {
   initBlockchain,
@@ -26,14 +28,14 @@ import {
 import { MapUpdate } from "../../src/rollup/transaction";
 import { DEPLOYER } from "../../env.json";
 
-setNumberOfWorkers(6);
+setNumberOfWorkers(8);
 const network: blockchain = "devnet";
 const fee = "100000000";
 
 let deployer: PrivateKey;
 let sender: PublicKey;
 
-const { tree, totalHash } = getValidatorsTreeAndHash();
+const { validators, tree } = getValidators(0);
 const validatorsRoot = tree.getRoot();
 const contractPrivateKey = nameContract.contractPrivateKey;
 const contractPublicKey = contractPrivateKey.toPublicKey();
@@ -51,7 +53,9 @@ describe("Domain Name Service Contract", () => {
     sender = deployer.toPublicKey();
 
     const networkId = Mina.getNetworkId();
+    console.log("Network:", network);
     console.log("Network ID:", networkId);
+    console.log("Contract address:", contractPublicKey.toBase58());
     console.log("sender", sender.toBase58());
     console.log("Sender balance", await accountBalanceMina(sender));
     expect(deployer).toBeDefined();
@@ -76,7 +80,7 @@ describe("Domain Name Service Contract", () => {
     console.log("block verification key", blockVerificationKey.hash.toJSON());
   });
 
-  it.skip(`should deploy contract`, async () => {
+  it(`should deploy contract`, async () => {
     await fetchAccount({ publicKey: sender });
 
     const tx = await Mina.transaction(
@@ -84,8 +88,8 @@ describe("Domain Name Service Contract", () => {
       async () => {
         AccountUpdate.fundNewAccount(sender);
         await zkApp.deploy({});
-        zkApp.validators.set(validatorsRoot);
-        zkApp.validatorsHash.set(totalHash);
+        zkApp.validatorsPacked.set(validators.pack());
+        zkApp.domain.set(Encoding.stringToFields("mina")[0]);
         zkApp.account.zkappUri.set("https://zkcloudworker.com");
       }
     );
@@ -102,7 +106,10 @@ describe("Domain Name Service Contract", () => {
       { sender, fee, memo: "block 0" },
       async () => {
         AccountUpdate.fundNewAccount(sender);
-        await zkApp.firstBlock(nameContract.firstBlockPublicKey!);
+        await zkApp.blockZero(
+          nameContract.firstBlockPublicKey!,
+          UInt64.from(Date.now())
+        );
       }
     );
     await tx2.prove();
