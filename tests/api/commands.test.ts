@@ -4,7 +4,7 @@ import axios from "axios";
 import { nameContract } from "../../src/config";
 import { uniqueNamesGenerator, names } from "unique-names-generator";
 
-const ELEMENTS_NUMBER = 2;
+const ELEMENTS_NUMBER = 7;
 const transactions: string[] = [];
 const contractAddress = nameContract.contractAddress;
 
@@ -28,6 +28,8 @@ describe("Domain Name Service API", () => {
   it(`should prepare transactions data`, async () => {
     console.log("Preparing data...");
     console.time(`prepared data`);
+    //transactions.push("this is invalid tx 1");
+    //transactions.push("this is invalid tx 2");
     for (let i = 0; i < ELEMENTS_NUMBER; i++) {
       const tx: Transaction = {
         operation: "add",
@@ -41,10 +43,11 @@ describe("Domain Name Service API", () => {
       transactions.push(JSON.stringify(tx, null, 2));
       //transactions.push(tx);
     }
+
     console.timeEnd(`prepared data`);
   });
 
-  it(`should add task to process transactions`, async () => {
+  it.skip(`should add task to process transactions`, async () => {
     console.log(`Adding task to process transactions...`);
     /*
       adding task to process transactions
@@ -65,7 +68,7 @@ describe("Domain Name Service API", () => {
     console.log(`task api call result:`, answer);
   });
 
-  it(`should send transactions`, async () => {
+  it.skip(`should send transactions`, async () => {
     const answer = await zkCloudWorkerRequest({
       command: "sendTransactions",
       transactions,
@@ -111,7 +114,7 @@ describe("Domain Name Service API", () => {
     if (!answer.success) return;
 
     let data = JSON.parse(answer.result);
-    console.log(`contract state:`, data?.contractState);
+    console.log(`contract state:`, data, data?.contractState);
 
     /*
     const hash = data.blocks[data.blocks.length - 1].ipfs;

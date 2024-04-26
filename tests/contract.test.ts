@@ -56,8 +56,8 @@ const api = new zkCloudWorkerClient({
 
 let deployer: PrivateKey;
 let sender: PublicKey;
-const ELEMENTS_NUMBER = 2;
-const BLOCKS_NUMBER = 3;
+const ELEMENTS_NUMBER = 3;
+const BLOCKS_NUMBER = 20;
 const domainNames: string[][] = [];
 
 const { validators, tree } = getValidators(0);
