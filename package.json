@@ -18,10 +18,11 @@
   "dependencies": {
     "adm-zip": "^0.5.12",
     "axios": "^1.6.8",
+    "minanft": "^1.10.0",
     "o1js": "^1.0.1",
     "tslib": "^2.6.2",
     "unique-names-generator": "^4.7.1",
-    "zkcloudworker": "^0.4.3"
+    "zkcloudworker": "^0.4.5"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
