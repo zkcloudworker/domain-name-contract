@@ -69,12 +69,12 @@ import { DomainDatabase } from "./rollup/database";
 import { saveToIPFS, loadFromIPFS } from "./contract/storage";
 import { blockProducer } from "./config";
 import { stringToFields, stringFromFields } from "./lib/hash";
-import { Metadata } from "./contract/metadata";
 import { nameContract } from "./config";
+import { RollupNFTData, createRollupNFT } from "./rollup/rollup-nft";
 
 const fullValidation = true;
 const waitTx = true as boolean;
-const proofsOff = false as boolean;
+const proofsOff = true as boolean;
 
 export class DomainNameServiceWorker extends zkCloudWorker {
   static mapUpdateVerificationKey: VerificationKey | undefined = undefined;
@@ -1354,37 +1354,23 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       const tx: DomainSerializedTransaction = JSON.parse(
         txInput.transaction
       ) as DomainSerializedTransaction;
-      const map = new MerkleMap();
-      const root = map.getRoot();
-      const nftStorage = new Storage({ hashString: [Field(0), Field(0)] });
+      const nft: RollupNFTData = await createRollupNFT(tx);
       const name = stringToFields(tx.name);
       if (name.length !== 1) throw new Error("Invalid name length");
       const domainName: DomainName = new DomainName({
         name: name[0],
         data: new DomainNameValue({
           address: PublicKey.fromBase58(tx.address),
-          metadata: new Metadata({
-            data: root,
-            kind: root,
-          }),
-          storage: nftStorage,
+          metadata: nft.metadataRoot,
+          storage: nft.storage,
           expiry: UInt64.from(tx.expiry),
         }),
       });
       let oldDomain: DomainName | undefined = undefined;
       if (tx.oldDomain !== undefined) {
-        oldDomain = new DomainName({
-          name: stringToFields(tx.oldDomain.name)[0],
-          data: new DomainNameValue({
-            address: PublicKey.fromBase58(tx.oldDomain.address),
-            metadata: new Metadata({
-              data: root,
-              kind: root,
-            }),
-            storage: nftStorage,
-            expiry: UInt64.from(tx.oldDomain.expiry),
-          }),
-        });
+        oldDomain = DomainName.fromFields(
+          deserializeFields(tx.oldDomain)
+        ) as DomainName;
       }
       const operationType =
         tx.operation === "add"

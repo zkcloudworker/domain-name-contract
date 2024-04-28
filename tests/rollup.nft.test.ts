@@ -13,6 +13,7 @@ import {
   verify,
   fetchAccount,
 } from "o1js";
+import { RollupNFT, Storage } from "minanft";
 import {
   ValidatorsVoting,
   ValidatorsDecision,
@@ -25,7 +26,6 @@ import {
   ChangeValidatorsData,
 } from "../src/contract/domain-contract";
 import { getValidators } from "../src/rollup/validators-proof";
-import { Storage } from "../src/contract/storage";
 import { nameContract, JWT, blockProducer } from "../src/config";
 import {
   zkCloudWorkerClient,
@@ -38,11 +38,19 @@ import {
   initBlockchain,
   getNetworkIdHash,
 } from "zkcloudworker";
-import { MapUpdate } from "../src/rollup/transaction";
+import {
+  MapUpdate,
+  DomainSerializedTransaction,
+  DomainName,
+} from "../src/rollup/transaction";
+import { DomainDatabase } from "../src/rollup/database";
 import { calculateValidatorsProof } from "../src/rollup/validators-proof";
 import { zkcloudworker } from "../src/worker"; //, setVerificationKey
 import { DEPLOYER, PINATA_JWT } from "../env.json";
 import { uniqueNamesGenerator, names } from "unique-names-generator";
+import { ImageData, createRollupNFT } from "../src/rollup/rollup-nft";
+import { loadFromIPFS } from "../src/contract/storage";
+import { deserializeFields } from "../src/lib/fields";
 
 setNumberOfWorkers(8);
 const chain: blockchain = "local" as blockchain;
@@ -56,7 +64,7 @@ const api = new zkCloudWorkerClient({
 
 let deployer: PrivateKey;
 let sender: PublicKey;
-const ELEMENTS_NUMBER = 1;
+const ELEMENTS_NUMBER = 2;
 const BLOCKS_NUMBER = 1;
 const domainNames: string[][] = [];
 
@@ -64,31 +72,58 @@ const { validators, tree } = getValidators(0);
 
 const contractPrivateKey = PrivateKey.random(); //nameContract.contractPrivateKey;
 const contractPublicKey = contractPrivateKey.toPublicKey();
-//PublicKey.fromBase58(
-//  "B62qiu5ZzyjYqauNFgxybax6buGNH9V9DhWtKPrYPQCB6FpZe5VBpE6"
-//); // contractPrivateKey.toPublicKey();
 
 const zkApp = new DomainNameContract(contractPublicKey);
 let blockVerificationKey: VerificationKey;
 let validatorsVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
 let contractVerificationKey: VerificationKey;
-const tokenId: Field = zkApp.deriveTokenId();
 
-type DomainTransactionType = "add" | "extend" | "update" | "remove";
-interface TransactionJSON {
-  operation: DomainTransactionType;
-  name: string;
-  address: string;
-  expiry: number;
-  metadata?: string;
-  oldDomain?: {
-    name: string;
-    address: string;
-    expiry: number;
-    metadata?: string;
-  };
-  signature?: string;
+async function createTransaction(): Promise<DomainSerializedTransaction> {
+  const keys = [
+    {
+      friend1: uniqueNamesGenerator({
+        dictionaries: [names],
+        length: 1,
+      }),
+    },
+    {
+      friend2: uniqueNamesGenerator({
+        dictionaries: [names],
+        length: 1,
+      }),
+    },
+    { chain },
+  ];
+
+  const image: ImageData = {
+    size: 287846,
+    mimeType: "image/jpeg",
+    sha3_512:
+      "qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==",
+    filename: "image.jpg",
+    ipfsHash: "bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i",
+  } as ImageData;
+
+  const description =
+    "This is a description of Rollup NFT for Mina Domain Name Service";
+
+  const tx: DomainSerializedTransaction = {
+    operation: "add",
+    name: uniqueNamesGenerator({
+      dictionaries: [names],
+      length: 1,
+    }).toLowerCase(),
+    address: PrivateKey.random().toPublicKey().toBase58(),
+    expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
+    metadata: JSON.stringify({
+      keys,
+      image,
+      description,
+      contractAddress: contractPublicKey.toBase58(),
+    }),
+  } as DomainSerializedTransaction;
+  return tx;
 }
 
 describe("Domain Name Service Contract", () => {
@@ -98,22 +133,14 @@ describe("Domain Name Service Contract", () => {
     for (let j = 0; j < BLOCKS_NUMBER; j++) {
       const transactions: string[] = [];
       for (let i = 0; i < ELEMENTS_NUMBER; i++) {
-        const tx: TransactionJSON = {
-          operation: "add",
-          name: uniqueNamesGenerator({
-            dictionaries: [names],
-            length: 1,
-          }).toLowerCase(),
-          address: PrivateKey.random().toPublicKey().toBase58(),
-          expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
-        };
+        const tx = await createTransaction();
         transactions.push(JSON.stringify(tx, null, 2));
       }
       console.log(
         "domainNames:",
         transactions.map((t) => JSON.parse(t).name)
       );
-      transactions.push("this is invalid tx");
+      //transactions.push("this is invalid tx");
       domainNames.push(transactions);
     }
 
@@ -392,6 +419,78 @@ describe("Domain Name Service Contract", () => {
     }
   });
 
+  it(`should get Rollup's NFT URLs and uri from the DA layer`, async () => {
+    const blocks = await api.execute({
+      repo: "nameservice",
+      task: "getBlocksInfo",
+      transactions: [],
+      args: JSON.stringify({
+        contractAddress: contractPublicKey.toBase58(),
+      }),
+      developer: "@staketab",
+      metadata: `get blocks`,
+      mode: "sync",
+    });
+    expect(blocks).toBeDefined();
+    //console.log(`info api call result:`, blocks);
+    expect(blocks.success).toBe(true);
+    expect(blocks.result).toBeDefined();
+    let data = JSON.parse(blocks.result);
+    console.log(`blocks:`, data);
+    const lastProvedBlockNumber =
+      data?.contractState?.lastProvedBlock.blockNumber;
+    console.log(`last proved block number:`, lastProvedBlockNumber);
+    expect(lastProvedBlockNumber).toBeDefined();
+    const blocksList: object[] = data?.blocks;
+    // find the last proved block
+    let index = -1;
+    for (let i = 0; i < blocksList.length; i++) {
+      if (
+        Number((blocksList[i] as any).blockNumber) ===
+        Number(lastProvedBlockNumber)
+      ) {
+        index = i;
+        break;
+      }
+    }
+    console.log(`index:`, index);
+    expect(index).toBeDefined();
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(index).toBeLessThan(data.blocks.length);
+    const ipfs = data?.blocks[index].ipfs;
+    console.log(`last proved block ipfs hash:`, ipfs);
+    expect(ipfs).toBeDefined();
+    if (ipfs === undefined) return;
+    const blockData = await loadFromIPFS(ipfs);
+    console.log(`block data:`, blockData);
+    const database = new DomainDatabase(blockData.database);
+    const storages: Storage[] = [];
+    Object.keys(database.data).forEach((name) => {
+      console.log(`Name: ${name}, Record: ${database.data[name]}`);
+      const domainName = DomainName.fromFields(
+        deserializeFields(database.data[name])
+      );
+      storages.push(
+        new Storage({
+          hashString: [
+            domainName.data.storage.hashString[0],
+            domainName.data.storage.hashString[1],
+          ],
+        })
+      );
+    });
+    for (const storage of storages) {
+      const nft = new RollupNFT({ storage });
+      await nft.loadMetadata();
+      console.log("Rollup NFT", nft.name);
+      console.log("url:", nft.getURL());
+      console.log(
+        "uri:",
+        "https://gateway.pinata.cloud/ipfs/" + nft.storage?.toIpfsHash()
+      );
+    }
+  });
+
   it.skip(`should change validators`, async () => {
     console.log(`Changing validators...`);
     Memory.info("changing validators");
@@ -479,82 +578,3 @@ async function accountBalance(address: PublicKey): Promise<UInt64> {
 async function accountBalanceMina(address: PublicKey): Promise<number> {
   return Number((await accountBalance(address)).toBigInt()) / 1e9;
 }
-
-/*
-  it.skip(`should send block 1`, async () => {
-    console.log(`Sending block 1...`);
-    const expiry = UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000);
-    const blockPrivateKey = PrivateKey.random();
-    const blockPublicKey = blockPrivateKey.toPublicKey();
-
-    const blockStorage = Storage.fromIpfsHash(
-      "bafkreifnek4e2r4cz62h22rwtxsi4bhsq6tt6ceeixdddyurpez32c6w64"
-    );
-    const blockProducerPrivateKey = PrivateKey.random();
-    const blockProducerPublicKey = blockProducerPrivateKey.toPublicKey();
-    const oldRoot = tree.getRoot();
-
-    const decision = new ValidatorsDecision({
-      contract: contractPublicKey,
-      chainId,
-      root: validatorsRoot,
-      decision: ValidatorDecisionType.createBlock,
-      address: blockProducerPublicKey,
-      data: ValidatorDecisionExtraData.fromBlockCreationData({
-        verificationKey: blockVerificationKey,
-        blockPublicKey,
-        oldRoot,
-      }),
-      expiry: UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000),
-    });
-    const proof: ValidatorsVotingProof = await calculateValidatorsProof(
-      decision,
-      validatorsVerificationKey,
-      false
-    );
-    if (proof.publicInput.hash.toJSON() !== totalHash.toJSON())
-      throw new Error("Invalid validatorsHash");
-    const ok = await verify(proof, validatorsVerificationKey);
-    if (!ok) throw new Error("proof verification failed");
-    console.log("validators proof verified:", ok);
-
-    const blockData: BlockData = new BlockData({
-      address: blockPublicKey,
-      root: oldRoot,
-      storage: blockStorage,
-      txs: new NewBlockTransactions({ count: Field(0), value: Field(0) }),
-      isFinal: Bool(false),
-      isProved: Bool(false),
-      isInvalid: Bool(false),
-      isValidated: Bool(false),
-      blockNumber: Field(1),
-    });
-
-    await fetchMinaAccount({ publicKey: sender, force: true });
-    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
-    await fetchMinaAccount({
-      publicKey: nameContract.firstBlockPublicKey!,
-      tokenId,
-      force: true,
-    });
-
-    const tx = await Mina.transaction(
-      { sender, fee: await fee(), memo: `block 1` },
-      async () => {
-        AccountUpdate.fundNewAccount(sender);
-        await zkApp.block(proof, blockData, blockVerificationKey); //signature,
-      }
-    );
-
-    tx.sign([deployer, blockPrivateKey]);
-    await tx.prove();
-    tx.sign([deployer]);
-    await sendTx(tx, "block 1");
-    await sleep(20000);
-    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
-    const validators = zkApp.validators.get();
-    const validatorsHash = zkApp.validatorsHash.get();
-    expect(validators.toJSON()).toBe(validators.toJSON());
-    expect(validatorsHash.toJSON()).toBe(totalHash.toJSON());
-  });
-*/

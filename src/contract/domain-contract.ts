@@ -27,7 +27,6 @@ import {
 } from "../rollup/validators";
 import { MapUpdateProof, MapTransition } from "../rollup/transaction";
 import { getNetworkIdHash } from "zkcloudworker";
-import { p } from "o1js/dist/node/bindings/crypto/finite-field";
 
 export class BlockParams extends Struct({
   txsCount: UInt32,
