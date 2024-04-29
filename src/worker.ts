@@ -74,7 +74,7 @@ import { RollupNFTData, createRollupNFT } from "./rollup/rollup-nft";
 
 const fullValidation = true;
 const waitTx = true as boolean;
-const proofsOff = true as boolean;
+const proofsOff = false as boolean;
 
 export class DomainNameServiceWorker extends zkCloudWorker {
   static mapUpdateVerificationKey: VerificationKey | undefined = undefined;

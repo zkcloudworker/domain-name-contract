@@ -13,6 +13,7 @@
     "compile": "rm -rf dist && tsc",
     "build": "rm -rf dist && tsc && rm domain-name-service-contract.zip && 7z a -tzip -r -stl -m0=Copy domain-name-service-contract.zip dist package.json node_modules",
     "test": "jest",
+    "rollup": "jest tests/rollup.nft.test.ts",
     "coverage": "jest --coverage tests/*.test.ts"
   },
   "dependencies": {

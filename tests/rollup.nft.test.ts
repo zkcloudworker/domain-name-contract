@@ -1,6 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
 import {
-  Field,
   PrivateKey,
   setNumberOfWorkers,
   Mina,
@@ -10,20 +9,13 @@ import {
   Cache,
   PublicKey,
   Encoding,
-  verify,
   fetchAccount,
 } from "o1js";
 import { RollupNFT, Storage } from "minanft";
-import {
-  ValidatorsVoting,
-  ValidatorsDecision,
-  ValidatorDecisionType,
-  ValidatorsVotingProof,
-} from "../src/rollup/validators";
+import { ValidatorsVoting } from "../src/rollup/validators";
 import {
   DomainNameContract,
   BlockContract,
-  ChangeValidatorsData,
 } from "../src/contract/domain-contract";
 import { getValidators } from "../src/rollup/validators-proof";
 import { nameContract, JWT, blockProducer } from "../src/config";
@@ -36,7 +28,6 @@ import {
   fetchMinaAccount,
   fee,
   initBlockchain,
-  getNetworkIdHash,
 } from "zkcloudworker";
 import {
   MapUpdate,
@@ -44,7 +35,6 @@ import {
   DomainName,
 } from "../src/rollup/transaction";
 import { DomainDatabase } from "../src/rollup/database";
-import { calculateValidatorsProof } from "../src/rollup/validators-proof";
 import { zkcloudworker } from "../src/worker"; //, setVerificationKey
 import { DEPLOYER, PINATA_JWT } from "../env.json";
 import { uniqueNamesGenerator, names } from "unique-names-generator";
@@ -65,7 +55,7 @@ const api = new zkCloudWorkerClient({
 let deployer: PrivateKey;
 let sender: PublicKey;
 const ELEMENTS_NUMBER = 2;
-const BLOCKS_NUMBER = 1;
+const BLOCKS_NUMBER = 2;
 const domainNames: string[][] = [];
 
 const { validators, tree } = getValidators(0);
@@ -479,63 +469,21 @@ describe("Domain Name Service Contract", () => {
         })
       );
     });
+    console.log(" ");
+    console.log(
+      "RESULT: Rollup NFTs fetched from the rollup contract and DA layer:"
+    );
     for (const storage of storages) {
       const nft = new RollupNFT({ storage });
       await nft.loadMetadata();
-      console.log("Rollup NFT", nft.name);
+      console.log(" ");
+      console.log("Rollup NFT name:", nft.name);
       console.log("url:", nft.getURL());
       console.log(
         "uri:",
         "https://gateway.pinata.cloud/ipfs/" + nft.storage?.toIpfsHash()
       );
     }
-  });
-
-  it.skip(`should change validators`, async () => {
-    console.log(`Changing validators...`);
-    Memory.info("changing validators");
-    const expiry = UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000);
-    const decision = new ValidatorsDecision({
-      contractAddress: contractPublicKey,
-      chainId: getNetworkIdHash(),
-      validators,
-      decisionType: ValidatorDecisionType.setValidators,
-      data: ChangeValidatorsData.toFields({
-        new: validators,
-        old: validators,
-        storage: new Storage({ hashString: [Field(0), Field(0)] }),
-      }),
-      expiry,
-    });
-    const proof: ValidatorsVotingProof = await calculateValidatorsProof(
-      decision,
-      validatorsVerificationKey,
-      false
-    );
-    const ok = await verify(proof.toJSON(), validatorsVerificationKey);
-    console.log("proof verified:", { ok });
-    expect(ok).toBe(true);
-    if (!ok) throw new Error("Proof is not verified");
-
-    await fetchMinaAccount({ publicKey: sender, force: true });
-    await fetchMinaAccount({ publicKey: contractPublicKey, force: true });
-
-    const tx = await Mina.transaction(
-      { sender, fee: await fee(), memo: "change validators" },
-      async () => {
-        await zkApp.setValidators(proof);
-      }
-    );
-    Memory.info("proving");
-    console.log("proving...");
-    await tx.prove();
-    Memory.info("signing");
-    console.log("signing...");
-    tx.sign([deployer]);
-    Memory.info("sending");
-    console.log("sending...");
-    await sendTx(tx, "Change validators");
-    Memory.info("validators changed");
   });
 });
 
