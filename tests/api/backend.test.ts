@@ -22,6 +22,14 @@ interface Transaction {
   signature?: string;
 }
 
+const name = "john";
+const key = PrivateKey.fromBase58(
+  // "B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME"
+  "EKEDXUx9yeN5iA6TxqQvXnLmRjGkQGHJsiQgQgLNgFLVvE3u4kAv"
+);
+const oldDomain =
+  "I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ";
+
 describe("Domain Name Service API", () => {
   it(`should prepare transactions data`, async () => {
     console.log("Preparing data...");
@@ -68,13 +76,13 @@ describe("Domain Name Service API", () => {
     console.log(`tx api call result:`, answer);
   });
 
-  it.skip(`should get update signature`, async () => {
+  it(`should prepare update transaction`, async () => {
     const keys = [
       {
-        key11: "value1",
+        key11: "value11",
       },
       {
-        key12: "value2",
+        key12: "value12",
       },
       {
         chain: "devnet",
@@ -99,56 +107,145 @@ describe("Domain Name Service API", () => {
     } as ImageData;
 
     const description =
-      "This is a description of Rollup NFT for Mina Domain Name Service";
+      "This is a description of Rollup NFT for Mina Domain Name Servicen for name " +
+      name;
 
     const tx: Transaction = {
       operation: "update",
-      name: "john",
-      address: "B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME",
+      name,
+      address: key.toPublicKey().toBase58(),
       oldDomain,
       expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
       metadata: JSON.stringify({
         keys,
         image,
         description,
-        contractAddress: contractPublicKey.toBase58(),
+        contractAddress,
       }),
     } as Transaction;
 
+    console.log(`tx:`, tx);
     /*
-{
-  operation: 'update',
-  name: 'aubine',
-  address: 'B62qrNQtSckFCw48oyHhVpB4JMMnDvvs98axUD5Xi9ZmShKDTqHHnKV',
-  oldDomain: 'I.lnsTL4dVtHMYGjTOJ503pphs3yq8qRrfvcDVyeDkCd.hVnYp5WZB.sziBUeMarQPiOgA5J7kY_efuxHqPhpOiewtaprS0B-..Ti6qeQOvq6xgZDwSTP4U4G1nRAKhx1ZTb1fH_8Zkx6C.wSJTlw5pYgNZ1nEbULx1ZZIH1phtQSTw8kG22pgJwvB.ppjYhZ2ayVWahRneiFGZqxWZoFnc2pWdiJWN0ITdwB.2FnMyBHaxt2c1JHN6lmdydGdjNWNyI3Zyknc6BXaB.e5jqRaZ',
-  expiry: 1746200931434,
-  metadata: '{"keys":[{"friend1":"Rosabel"},{"friend2":"Ivett"},{"chain":"local"}],"image":{"size":287846,"mimeType":"image/jpeg","sha3_512":"qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==","filename":"image.jpg","ipfsHash":"bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i"},"description":"This is a description of Rollup NFT for Mina Domain Name Service","contractAddress":"B62qjJ7tL3BKkpcC3Xu7WyahX7xyHod59N2pu57CrsDfsbrCz1Ps1Rn"}'
-}
 
+tx: {
+  operation: 'update',
+  name: 'john',
+  address: 'B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME',
+  oldDomain: 'I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ',
+  expiry: 1746215243316,
+  metadata: '{"keys":[{"key11":"value11"},{"key12":"value12"},{"chain":"devnet"}],"image":{"size":287846,"mimeType":"image/jpeg","sha3_512":"qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==","filename":"image.jpg","ipfsHash":"bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i"},"description":"This is a description of Rollup NFT for Mina Domain Name Servicen for name john","contractAddress":"B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME"}'
+}
     */
+    let args: string = JSON.stringify({
+      contractAddress,
+      tx,
+    });
 
     let answer = await zkCloudWorkerRequest({
       command: "execute",
       task: "prepareSignTransactionData",
-      args: JSON.stringify(tx),
-      metadata: `sign`,
+      args,
+      metadata: `command sign`,
+      mode: "async",
     });
-    console.log(`tx api call result:`, answer);
+    console.log(`sign api call result:`, answer);
     /*
-{
+sign api call result: {
   success: true,
-  jobId: undefined,
-  result: '{"operation":"update","name":"aubine","address":"B62qrNQtSckFCw48oyHhVpB4JMMnDvvs98axUD5Xi9ZmShKDTqHHnKV","oldDomain":"I.lnsTL4dVtHMYGjTOJ503pphs3yq8qRrfvcDVyeDkCd.hVnYp5WZB.sziBUeMarQPiOgA5J7kY_efuxHqPhpOiewtaprS0B-..Ti6qeQOvq6xgZDwSTP4U4G1nRAKhx1ZTb1fH_8Zkx6C.wSJTlw5pYgNZ1nEbULx1ZZIH1phtQSTw8kG22pgJwvB.ppjYhZ2ayVWahRneiFGZqxWZoFnc2pWdiJWN0ITdwB.2FnMyBHaxt2c1JHN6lmdydGdjNWNyI3Zyknc6BXaB.e5jqRaZ","expiry":1746200931434,"metadata":"C.Mqwb8BnFvRN10ytntdXEpwBkats3W26l1LdjF5aMPNC.aPUUlsJAgufMt58BUO1mNCGn3k14MjxYy9uobGO7H4D.zqQGDOBjsCHJsdUFWymbXyQAXar4MAtfjhi6TtltyK","signature":"{\\"signatureData\\":[\\"3\\",\\"392999865578849\\",\\"7014059621991370199857337948387178112441331189809613583908621235103228898540\\",\\"0\\",\\"28057399436132240370810866270175313989408153359524402339534778736303282406362\\",\\"1220383054724594907887827201555292641629587111295989739548634752226487241395\\",\\"97924738292166243711069197763764186725713351314561473304046055987186121321\\",\\"2467002300102083866279152720214383891277676664443645207118296313299744632\\",\\"1746200931434\\"]}","storage":"C.2SOpP8kKRvNwk9j3o7_8T3P1O6hf-lrgD766h1UPmnB.ppjYhZ2ayVWajpnb0IWZm9mbzR3YiFXNzZGcqZGb3.4dDdi9GclxGN6NGcnpmayZHdhJTYjR3biVDezIXZB"}',
-  error: undefined
+  jobId: '6459034946.1714679244719.ItJltbhrIL8B4HAcIv2MCpgO3CqPIxVZ'
+    */
+    const jobId = answer.jobId;
+    console.log(`jobId:`, jobId);
+    let result: string | undefined = undefined;
+    while (result === undefined) {
+      await sleep(5000);
+      answer = await zkCloudWorkerRequest({
+        command: "jobResult",
+        jobId,
+      });
+      console.log(`jobResult api call result:`, answer);
+      /*
+jobResult api call result: {
+  metadata: 'command sign',
+  task: 'prepareSignTransactionData',
+  maxAttempts: 0,
+  args: '{"contractAddress":"B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME","tx":{"operation":"update","name":"john","address":"B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME","oldDomain":"I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ","expiry":1746215243316,"metadata":"{\\"keys\\":[{\\"key11\\":\\"value11\\"},{\\"key12\\":\\"value12\\"},{\\"chain\\":\\"devnet\\"}],\\"image\\":{\\"size\\":287846,\\"mimeType\\":\\"image/jpeg\\",\\"sha3_512\\":\\"qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==\\",\\"filename\\":\\"image.jpg\\",\\"ipfsHash\\":\\"bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i\\"},\\"description\\":\\"This is a description of Rollup NFT for Mina Domain Name Servicen for name john\\",\\"contractAddress\\":\\"B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME\\"}"}}',
+  timeCreated: 1714679244719,
+  timeCreatedString: '2024-05-02T19:47:24.719Z',
+  jobId: '6459034946.1714679244719.ItJltbhrIL8B4HAcIv2MCpgO3CqPIxVZ',
+  repo: 'nameservice',
+  developer: '@staketab',
+  chain: 'devnet',
+  txNumber: 1,
+  jobStatus: 'started',
+  id: '6459034946',
+  timeStarted: 1714679244903
+}
+
+last call:
+
+ jobResult api call result: {
+  metadata: 'command sign',
+  task: 'prepareSignTransactionData',
+  maxAttempts: 1,
+  args: '{"contractAddress":"B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME","tx":{"operation":"update","name":"john","address":"B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME","oldDomain":"I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ","expiry":1746215243316,"metadata":"{\\"keys\\":[{\\"key11\\":\\"value11\\"},{\\"key12\\":\\"value12\\"},{\\"chain\\":\\"devnet\\"}],\\"image\\":{\\"size\\":287846,\\"mimeType\\":\\"image/jpeg\\",\\"sha3_512\\":\\"qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==\\",\\"filename\\":\\"image.jpg\\",\\"ipfsHash\\":\\"bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i\\"},\\"description\\":\\"This is a description of Rollup NFT for Mina Domain Name Servicen for name john\\",\\"contractAddress\\":\\"B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME\\"}"}}',
+  timeFinished: 1714679264673,
+  timeCreated: 1714679244719,
+  timeCreatedString: '2024-05-02T19:47:24.719Z',
+  jobId: '6459034946.1714679244719.ItJltbhrIL8B4HAcIv2MCpgO3CqPIxVZ',
+  result: '{"operation":"update","name":"john","address":"B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME","oldDomain":"I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ","expiry":1746215243316,"metadata":"C.fAW2srcSmCz-encl9ZzlWc6dr0OCHT8V_FYbDHqh34B.MJiwWztFaIjsHeHy1sQZjLK-cJWb_SMKHJ3ynEdQJ7C.5WapXO2VlgP96My9pB71lcDJHnVkGCshArB53d47-IB","signature":"{\\"signatureData\\":[\\"3\\",\\"6147305322\\",\\"16119603559795592684705059328739174182476087791571536533914181363529284631828\\",\\"0\\",\\"21161981547182976305517746574118117871656156516836062223210247855127985791564\\",\\"8252828962110737286457977138501801683497326888025574661025446278939669800377\\",\\"212783729872118894052159228882332477432662860532627661668176594586847820393\\",\\"2494185376037963918275203287858623942800206634428433309751950176614244713\\",\\"1746215243316\\"]}","storage":"C.w-49SKAOFysvBBFBPdFNUOCslaojXY1oRkawP9JkFiD.ppjYhZ2ayVWah5GbyUTeyQmexBXdhlHaodjMysmb4B.pFmNylXZ2dzZycnM3k3MnR2NqlmYt9Ga1oWN6JWaB"}',
+  repo: 'nameservice',
+  developer: '@staketab',
+  chain: 'devnet',
+  txNumber: 1,
+  jobStatus: 'finished',
+  billedDuration: 19793,
+  id: '6459034946',
+  timeStarted: 1714679244903
+}
+
+      */
+      result = answer.result;
+    }
+
+    const tx2 = JSON.parse(result);
+    console.log(`tx2:`, tx2);
+    /*
+tx2: {
+  operation: 'update',
+  name: 'john',
+  address: 'B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME',
+  oldDomain: 'I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ',
+  expiry: 1746215243316,
+  metadata: 'C.fAW2srcSmCz-encl9ZzlWc6dr0OCHT8V_FYbDHqh34B.MJiwWztFaIjsHeHy1sQZjLK-cJWb_SMKHJ3ynEdQJ7C.5WapXO2VlgP96My9pB71lcDJHnVkGCshArB53d47-IB',
+  signature: '{"signatureData":["3","6147305322","16119603559795592684705059328739174182476087791571536533914181363529284631828","0","21161981547182976305517746574118117871656156516836062223210247855127985791564","8252828962110737286457977138501801683497326888025574661025446278939669800377","212783729872118894052159228882332477432662860532627661668176594586847820393","2494185376037963918275203287858623942800206634428433309751950176614244713","1746215243316"]}',
+  storage: 'C.w-49SKAOFysvBBFBPdFNUOCslaojXY1oRkawP9JkFiD.ppjYhZ2ayVWah5GbyUTeyQmexBXdhlHaodjMysmb4B.pFmNylXZ2dzZycnM3k3MnR2NqlmYt9Ga1oWN6JWaB'
 }
 
     */
-    const data = JSON.parse(answer.result);
 
-    const signData = JSON.parse(data.signature);
-    // sign it with the Auro Wallet
-    tx.signature = "result of the signing with Auro Wallet";
-    // send the signed transaction as usual
+    const signData = JSON.parse(tx2.signature).signatureData.map((v: string) =>
+      Field.fromJSON(v)
+    ); // pass instaed to Auro Wallet JSON.parse(tx2.signature).signatureData
+
+    const signature = Signature.create(key, signData); // sign instaed with Auro Wallet
+    tx2.signature = signature.toBase58();
+    console.log(`tx2 signed:`, tx2);
+    /*
+ tx2 signed: {
+  operation: 'update',
+  name: 'john',
+  address: 'B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME',
+  oldDomain: 'I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ',
+  expiry: 1746215243316,
+  metadata: 'C.fAW2srcSmCz-encl9ZzlWc6dr0OCHT8V_FYbDHqh34B.MJiwWztFaIjsHeHy1sQZjLK-cJWb_SMKHJ3ynEdQJ7C.5WapXO2VlgP96My9pB71lcDJHnVkGCshArB53d47-IB',
+  signature: '7mX7tSCTtAS5Bvrm6TnmcxeJcy3pjbdUZ2tcJG2mz4B2F9r42DN7kJbyQw1q5bWJAUpzc3xpQxTaU7fDiKw1n3EXQ1Xhx7pc',
+  storage: 'C.w-49SKAOFysvBBFBPdFNUOCslaojXY1oRkawP9JkFiD.ppjYhZ2ayVWah5GbyUTeyQmexBXdhlHaodjMysmb4B.pFmNylXZ2dzZycnM3k3MnR2NqlmYt9Ga1oWN6JWaB'
+}
+
+    */
+    transactions.push(JSON.stringify(tx2, null, 2));
+    await sleep(1000);
   });
 
   it.skip(`should restart the block validation`, async () => {
@@ -224,8 +321,10 @@ async function zkCloudWorkerRequest(params: {
   transactions?: string[];
   args?: string;
   metadata?: string;
+  mode?: string;
+  jobId?: string;
 }) {
-  const { command, task, transactions, args, metadata } = params;
+  const { command, task, transactions, args, metadata, mode, jobId } = params;
   const apiData = {
     auth: "M6t4jtbBAFFXhLERHQWyEB9JA9xi4cWqmYduaCXtbrFjb7yaY7TyaXDunKDJNiUTBEcyUomNXJgC",
     command: command,
@@ -238,7 +337,8 @@ async function zkCloudWorkerRequest(params: {
       repo: "nameservice",
       developer: "@staketab",
       metadata,
-      mode: "sync",
+      mode: mode ?? "sync",
+      jobId,
     },
     chain: `devnet`,
   };

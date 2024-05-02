@@ -3,7 +3,6 @@ import { Storage } from "../contract/storage";
 import { Metadata } from "../contract/metadata";
 import { RollupNFT, FileData } from "minanft";
 import { Field } from "o1js";
-import { PINATA_JWT } from "../../env.json";
 
 export interface RollupNFTData {
   storage: Storage;
@@ -39,25 +38,29 @@ export async function createRollupNFT(
   }
 
   if (metadata.description)
-    nft.updateText({
-      key: `description`,
-      text: metadata.description,
-    });
+    console.log(`Description: ${metadata.description}`),
+      nft.updateText({
+        key: `description`,
+        text: metadata.description,
+      });
 
   if (metadata.contractAddress)
-    nft.updateText({
-      key: `contractAddress`,
-      text: metadata.contractAddress,
-    });
+    console.log(`Contract Address: ${metadata.contractAddress}`),
+      nft.updateText({
+        key: `contractAddress`,
+        text: metadata.contractAddress,
+      });
 
   if (metadata.image)
-    nft.updateFileData({
-      key: `image`,
-      type: "image",
-      data: getFileData(metadata.image),
-    });
+    console.log(`Image:`, metadata.image),
+      nft.updateFileData({
+        key: `image`,
+        type: "image",
+        data: getFileData(metadata.image),
+      });
 
-  await nft.prepareCommitData({ pinataJWT: PINATA_JWT });
+  console.log("Preparing commit data...");
+  await nft.prepareCommitData({ pinataJWT: process.env.PINATA_JWT });
 
   if (nft.storage === undefined) throw new Error("Storage is undefined");
   if (nft.metadata === undefined) throw new Error("Metadata is undefined");
