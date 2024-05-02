@@ -22,6 +22,7 @@ function isAccepted(
       return { accepted: false, reason: "no old domain" };
     if (element.signature === undefined)
       return { accepted: false, reason: "no signature" };
+    //console.log("isAccepted: verifying signature", element);
     if (
       element.signature
         .verify(

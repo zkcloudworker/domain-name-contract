@@ -17,12 +17,8 @@ interface Transaction {
   address: string;
   expiry: number;
   metadata?: string;
-  oldDomain?: {
-    name: string;
-    address: string;
-    expiry: number;
-    metadata?: string;
-  };
+  storage?: string;
+  oldDomain?: string;
   signature?: string;
 }
 
@@ -70,6 +66,89 @@ describe("Domain Name Service API", () => {
       metadata: `backend txs`,
     });
     console.log(`tx api call result:`, answer);
+  });
+
+  it.skip(`should get update signature`, async () => {
+    const keys = [
+      {
+        key11: "value1",
+      },
+      {
+        key12: "value2",
+      },
+      {
+        chain: "devnet",
+      },
+    ];
+
+    interface ImageData {
+      size: number;
+      sha3_512: string;
+      mimeType: string;
+      filename: string;
+      ipfsHash: string;
+    }
+
+    const image: ImageData = {
+      size: 287846,
+      mimeType: "image/jpeg",
+      sha3_512:
+        "qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==",
+      filename: "image.jpg",
+      ipfsHash: "bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i",
+    } as ImageData;
+
+    const description =
+      "This is a description of Rollup NFT for Mina Domain Name Service";
+
+    const tx: Transaction = {
+      operation: "update",
+      name: "john",
+      address: "B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME",
+      oldDomain,
+      expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
+      metadata: JSON.stringify({
+        keys,
+        image,
+        description,
+        contractAddress: contractPublicKey.toBase58(),
+      }),
+    } as Transaction;
+
+    /*
+{
+  operation: 'update',
+  name: 'aubine',
+  address: 'B62qrNQtSckFCw48oyHhVpB4JMMnDvvs98axUD5Xi9ZmShKDTqHHnKV',
+  oldDomain: 'I.lnsTL4dVtHMYGjTOJ503pphs3yq8qRrfvcDVyeDkCd.hVnYp5WZB.sziBUeMarQPiOgA5J7kY_efuxHqPhpOiewtaprS0B-..Ti6qeQOvq6xgZDwSTP4U4G1nRAKhx1ZTb1fH_8Zkx6C.wSJTlw5pYgNZ1nEbULx1ZZIH1phtQSTw8kG22pgJwvB.ppjYhZ2ayVWahRneiFGZqxWZoFnc2pWdiJWN0ITdwB.2FnMyBHaxt2c1JHN6lmdydGdjNWNyI3Zyknc6BXaB.e5jqRaZ',
+  expiry: 1746200931434,
+  metadata: '{"keys":[{"friend1":"Rosabel"},{"friend2":"Ivett"},{"chain":"local"}],"image":{"size":287846,"mimeType":"image/jpeg","sha3_512":"qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==","filename":"image.jpg","ipfsHash":"bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i"},"description":"This is a description of Rollup NFT for Mina Domain Name Service","contractAddress":"B62qjJ7tL3BKkpcC3Xu7WyahX7xyHod59N2pu57CrsDfsbrCz1Ps1Rn"}'
+}
+
+    */
+
+    let answer = await zkCloudWorkerRequest({
+      command: "execute",
+      task: "prepareSignTransactionData",
+      args: JSON.stringify(tx),
+      metadata: `sign`,
+    });
+    console.log(`tx api call result:`, answer);
+    /*
+{
+  success: true,
+  jobId: undefined,
+  result: '{"operation":"update","name":"aubine","address":"B62qrNQtSckFCw48oyHhVpB4JMMnDvvs98axUD5Xi9ZmShKDTqHHnKV","oldDomain":"I.lnsTL4dVtHMYGjTOJ503pphs3yq8qRrfvcDVyeDkCd.hVnYp5WZB.sziBUeMarQPiOgA5J7kY_efuxHqPhpOiewtaprS0B-..Ti6qeQOvq6xgZDwSTP4U4G1nRAKhx1ZTb1fH_8Zkx6C.wSJTlw5pYgNZ1nEbULx1ZZIH1phtQSTw8kG22pgJwvB.ppjYhZ2ayVWahRneiFGZqxWZoFnc2pWdiJWN0ITdwB.2FnMyBHaxt2c1JHN6lmdydGdjNWNyI3Zyknc6BXaB.e5jqRaZ","expiry":1746200931434,"metadata":"C.Mqwb8BnFvRN10ytntdXEpwBkats3W26l1LdjF5aMPNC.aPUUlsJAgufMt58BUO1mNCGn3k14MjxYy9uobGO7H4D.zqQGDOBjsCHJsdUFWymbXyQAXar4MAtfjhi6TtltyK","signature":"{\\"signatureData\\":[\\"3\\",\\"392999865578849\\",\\"7014059621991370199857337948387178112441331189809613583908621235103228898540\\",\\"0\\",\\"28057399436132240370810866270175313989408153359524402339534778736303282406362\\",\\"1220383054724594907887827201555292641629587111295989739548634752226487241395\\",\\"97924738292166243711069197763764186725713351314561473304046055987186121321\\",\\"2467002300102083866279152720214383891277676664443645207118296313299744632\\",\\"1746200931434\\"]}","storage":"C.2SOpP8kKRvNwk9j3o7_8T3P1O6hf-lrgD766h1UPmnB.ppjYhZ2ayVWajpnb0IWZm9mbzR3YiFXNzZGcqZGb3.4dDdi9GclxGN6NGcnpmayZHdhJTYjR3biVDezIXZB"}',
+  error: undefined
+}
+
+    */
+    const data = JSON.parse(answer.result);
+
+    const signData = JSON.parse(data.signature);
+    // sign it with the Auro Wallet
+    tx.signature = "result of the signing with Auro Wallet";
+    // send the signed transaction as usual
   });
 
   it.skip(`should restart the block validation`, async () => {

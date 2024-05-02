@@ -14,7 +14,13 @@
     "strictPropertyInitialization": false,
     "resolveJsonModule": true
   },
-  "include": ["index.ts", "src/**/*.ts", "tests/**/*.ts", "env.json"],
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "env.json",
+    "json/*.json"
+  ],
   "exclude": ["node_modules"],
   "ts-node": {
     "esm": true, // «———— enabling ESM for ts-node
