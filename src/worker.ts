@@ -40,6 +40,7 @@ import {
   DomainSerializedTransaction,
   DomainCloudTransaction,
   DomainCloudTransactionData,
+  DomainCloudTransactionStatus,
 } from "./rollup/transaction";
 import { Storage } from "./contract/storage";
 import { deserializeFields, serializeFields } from "./lib/fields";
@@ -71,6 +72,7 @@ import { blockProducer } from "./config";
 import { stringToFields, stringFromFields } from "./lib/hash";
 import { nameContract } from "./config";
 import { RollupNFTData, createRollupNFT } from "./rollup/rollup-nft";
+import { Metadata } from "minanft";
 
 const fullValidation = true;
 const waitTx = true as boolean;
@@ -83,7 +85,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   static validatorsVerificationKey: VerificationKey | undefined = undefined;
   readonly MIN_TIME_BETWEEN_BLOCKS = 1000 * 60 * 1; // 20 minutes
   readonly MAX_TIME_BETWEEN_BLOCKS = 1000 * 60 * 60; // 60 minutes
-  readonly MIN_TRANSACTIONS = 2;
+  readonly MIN_TRANSACTIONS = 1;
   readonly MAX_TRANSACTIONS = 4;
 
   constructor(cloud: Cloud) {
@@ -313,6 +315,8 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         return await this.getBlocksInfo();
       case "restart":
         return await this.restart();
+      case "prepareSignTransactionData":
+        return await this.prepareSignTransactionData();
       default:
         console.error("Unknown task in execute:", this.cloud.task);
         return "Unknown task in execute";
@@ -1347,31 +1351,15 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     return txSent.hash;
   }
 
-  private async convertTransaction(
-    txInput: CloudTransaction
-  ): Promise<DomainCloudTransactionData> {
+  public static async deserializeTransaction(
+    tx: DomainSerializedTransaction
+  ): Promise<{
+    tx?: DomainTransaction;
+    oldDomain?: DomainName;
+    status: DomainCloudTransactionStatus;
+    reason?: string;
+  }> {
     try {
-      const tx: DomainSerializedTransaction = JSON.parse(
-        txInput.transaction
-      ) as DomainSerializedTransaction;
-      const nft: RollupNFTData = await createRollupNFT(tx);
-      const name = stringToFields(tx.name);
-      if (name.length !== 1) throw new Error("Invalid name length");
-      const domainName: DomainName = new DomainName({
-        name: name[0],
-        data: new DomainNameValue({
-          address: PublicKey.fromBase58(tx.address),
-          metadata: nft.metadataRoot,
-          storage: nft.storage,
-          expiry: UInt64.from(tx.expiry),
-        }),
-      });
-      let oldDomain: DomainName | undefined = undefined;
-      if (tx.oldDomain !== undefined) {
-        oldDomain = DomainName.fromFields(
-          deserializeFields(tx.oldDomain)
-        ) as DomainName;
-      }
       const operationType =
         tx.operation === "add"
           ? DomainTransactionEnum.add
@@ -1385,27 +1373,140 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       if (operationType === undefined) {
         console.error("Invalid operation type:", tx.operation);
         return {
-          serializedTx: {
-            txId: txInput.txId,
-            transaction: txInput.transaction,
-            timeReceived: txInput.timeReceived,
-            status: "invalid",
-            reason: "Invalid operation type",
-          } as DomainCloudTransaction,
-          domainData: undefined,
+          status: "invalid",
+          reason: "Invalid operation type",
         };
       }
+      let metadata: Metadata;
+      let storage: Storage;
+      if (tx.operation === "update") {
+        if (
+          tx.signature === undefined ||
+          tx.storage === undefined ||
+          tx.metadata === undefined
+        ) {
+          //console.log("creating update NFT", tx);
+          const nft: RollupNFTData = await createRollupNFT(tx);
+          metadata = nft.metadataRoot;
+          storage = nft.storage;
+        } else {
+          //console.log("deserializing update NFT", tx);
+          metadata = Metadata.fromFields(
+            deserializeFields(tx.metadata)
+          ) as Metadata;
+          storage = Storage.fromFields(
+            deserializeFields(tx.storage)
+          ) as Storage;
+        }
+      } else {
+        const nft: RollupNFTData = await createRollupNFT(tx);
+        metadata = nft.metadataRoot;
+        storage = nft.storage;
+      }
+      if (metadata === undefined || storage === undefined)
+        throw new Error("metadata or storage is undefined");
+
+      const name = stringToFields(tx.name);
+      if (name.length !== 1) throw new Error("Invalid name length");
+      const domainName: DomainName = new DomainName({
+        name: name[0],
+        data: new DomainNameValue({
+          address: PublicKey.fromBase58(tx.address),
+          metadata,
+          storage,
+          expiry: UInt64.from(tx.expiry),
+        }),
+      });
+      let oldDomain: DomainName | undefined = undefined;
+      if (tx.oldDomain !== undefined) {
+        oldDomain = DomainName.fromFields(
+          deserializeFields(tx.oldDomain)
+        ) as DomainName;
+      }
+
       const domainTransaction: DomainTransaction = new DomainTransaction({
         type: operationType,
         domain: domainName,
       }) as DomainTransaction;
+
+      return {
+        status: "pending",
+        tx: domainTransaction,
+        oldDomain,
+      };
+    } catch (error: any) {
+      console.error("Error in convertTransaction", error, "tx:", tx);
+      return {
+        status: "invalid",
+        reason: error.message,
+      };
+    }
+  }
+
+  private async prepareSignTransactionData(): Promise<string> {
+    try {
+      if (this.cloud.args === undefined) return "error";
+      const tx = JSON.parse(this.cloud.args) as DomainSerializedTransaction;
+      console.log("prepareSignTransactionData", tx);
+      const deserializedTransaction =
+        await DomainNameServiceWorker.deserializeTransaction(tx);
+      if (
+        deserializedTransaction.status !== "pending" ||
+        deserializedTransaction.tx === undefined
+      ) {
+        console.error(
+          "Error in deserializing transaction:",
+          deserializedTransaction
+        );
+        return "error";
+      }
+
+      const signatureData = DomainTransaction.toFields(
+        deserializedTransaction.tx
+      ).map((field) => field.toJSON());
+      tx.signature = JSON.stringify({ signatureData });
+      tx.metadata = serializeFields(
+        Metadata.toFields(deserializedTransaction.tx.domain.data.metadata)
+      );
+      tx.storage = serializeFields(
+        Storage.toFields(deserializedTransaction.tx.domain.data.storage)
+      );
+      console.log("prepareSignTransactionData result", tx);
+      return JSON.stringify(tx);
+    } catch (error: any) {
+      console.error("Error in prepareSignTransactionData", error);
+      return "error";
+    }
+  }
+
+  private async convertTransaction(
+    txInput: CloudTransaction
+  ): Promise<DomainCloudTransactionData> {
+    try {
+      const txParsed: DomainSerializedTransaction = JSON.parse(
+        txInput.transaction
+      ) as DomainSerializedTransaction;
+      const tx = await DomainNameServiceWorker.deserializeTransaction(txParsed);
+      if (tx.status !== "pending" || tx.tx === undefined) {
+        return {
+          serializedTx: {
+            txId: txInput.txId,
+            transaction: txInput.transaction,
+            timeReceived: txInput.timeReceived,
+            status: tx.status,
+            reason: tx.reason,
+          } as DomainCloudTransaction,
+          domainData: undefined,
+        };
+      }
+
       const domainTransactionData: DomainTransactionData =
         new DomainTransactionData(
-          domainTransaction,
-          oldDomain,
-          tx.signature === undefined
+          tx.tx,
+          tx.oldDomain,
+          txParsed.signature === undefined
             ? undefined
-            : Signature.fromBase58(tx.signature)
+            : Signature.fromBase58(txParsed.signature)
         );
       return {
         serializedTx: {

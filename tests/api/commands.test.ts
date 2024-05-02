@@ -77,7 +77,7 @@ describe("Domain Name Service API", () => {
     console.log(`tx api call result:`, answer);
   });
 
-  it.skip(`should restart the block validation`, async () => {
+  it(`should restart the block validation`, async () => {
     console.log(`Restarting block validation...`);
     /*
       When the are problems with devnet and it does not produce blocks with zkApp txs for a long time
