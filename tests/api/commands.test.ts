@@ -1,8 +1,9 @@
 import { describe, expect, it } from "@jest/globals";
-import { PrivateKey } from "o1js";
+import { PrivateKey, Field, Signature } from "o1js";
 import axios from "axios";
 import { nameContract } from "../../src/config";
 import { uniqueNamesGenerator, names } from "unique-names-generator";
+import { sleep } from "zkcloudworker";
 
 const ELEMENTS_NUMBER = 7;
 const transactions: string[] = [];
@@ -15,17 +16,28 @@ interface Transaction {
   address: string;
   expiry: number;
   metadata?: string;
-  oldDomain?: {
-    name: string;
-    address: string;
-    expiry: number;
-    metadata?: string;
-  };
+  storage?: string;
+  oldDomain?: string;
   signature?: string;
 }
 
+const name = "john";
+const key = PrivateKey.fromBase58(
+  // "B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME"
+  "EKEDXUx9yeN5iA6TxqQvXnLmRjGkQGHJsiQgQgLNgFLVvE3u4kAv"
+);
+const oldDomain =
+  "I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ";
+
+const addTransaction: Transaction = {
+  operation: "add",
+  name,
+  address: key.toPublicKey().toBase58(),
+  expiry: Date.now() + 1000 * 60 * 60 * 24 * 365, // one year
+};
+
 describe("Domain Name Service API", () => {
-  it(`should prepare transactions data`, async () => {
+  it.skip(`should prepare transactions data`, async () => {
     console.log("Preparing data...");
     console.time(`prepared data`);
     //transactions.push("this is invalid tx 1");
@@ -45,6 +57,99 @@ describe("Domain Name Service API", () => {
     }
 
     console.timeEnd(`prepared data`);
+  });
+
+  it.skip(`should prepare add transaction`, async () => {
+    transactions.push(JSON.stringify(addTransaction, null, 2));
+  });
+
+  it.skip(`should prepare update transaction`, async () => {
+    const keys = [
+      {
+        key11: "value11",
+      },
+      {
+        key12: "value12",
+      },
+      {
+        chain: "devnet",
+      },
+    ];
+
+    interface ImageData {
+      size: number;
+      sha3_512: string;
+      mimeType: string;
+      filename: string;
+      ipfsHash: string;
+    }
+
+    const image: ImageData = {
+      size: 287846,
+      mimeType: "image/jpeg",
+      sha3_512:
+        "qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==",
+      filename: "image.jpg",
+      ipfsHash: "bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i",
+    } as ImageData;
+
+    const description =
+      "This is a description of Rollup NFT for Mina Domain Name Servicen for name " +
+      name;
+
+    const tx: Transaction = {
+      operation: "update",
+      name,
+      address: key.toPublicKey().toBase58(),
+      oldDomain,
+      expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
+      metadata: JSON.stringify({
+        keys,
+        image,
+        description,
+        contractAddress,
+      }),
+    } as Transaction;
+
+    console.log(`tx:`, tx);
+    let args: string = JSON.stringify({
+      contractAddress,
+      tx,
+    });
+
+    let answer = await zkCloudWorkerRequest({
+      command: "execute",
+      task: "prepareSignTransactionData",
+      args,
+      metadata: `command sign`,
+      mode: "async",
+    });
+    console.log(`sign api call result:`, answer);
+    const jobId = answer.jobId;
+    console.log(`jobId:`, jobId);
+    let result: string | undefined = undefined;
+    while (result === undefined) {
+      await sleep(5000);
+      answer = await zkCloudWorkerRequest({
+        command: "jobResult",
+        jobId,
+      });
+      console.log(`jobResult api call result:`, answer);
+      result = answer.result;
+    }
+
+    const tx2 = JSON.parse(result);
+    console.log(`tx2:`, tx2);
+
+    const signData = JSON.parse(tx2.signature).signatureData.map((v: string) =>
+      Field.fromJSON(v)
+    );
+    await sleep(1000);
+    const signature = Signature.create(key, signData);
+    tx2.signature = signature.toBase58();
+    console.log(`tx2 signed:`, tx2);
+    transactions.push(JSON.stringify(tx2, null, 2));
+    await sleep(1000);
   });
 
   it.skip(`should add task to process transactions`, async () => {
@@ -77,7 +182,7 @@ describe("Domain Name Service API", () => {
     console.log(`tx api call result:`, answer);
   });
 
-  it(`should restart the block validation`, async () => {
+  it.skip(`should restart the block validation`, async () => {
     console.log(`Restarting block validation...`);
     /*
       When the are problems with devnet and it does not produce blocks with zkApp txs for a long time
@@ -152,8 +257,10 @@ async function zkCloudWorkerRequest(params: {
   transactions?: string[];
   args?: string;
   metadata?: string;
+  mode?: string;
+  jobId?: string;
 }) {
-  const { command, task, transactions, args, metadata } = params;
+  const { command, task, transactions, args, metadata, mode, jobId } = params;
   const apiData = {
     auth: "M6t4jtbBAFFXhLERHQWyEB9JA9xi4cWqmYduaCXtbrFjb7yaY7TyaXDunKDJNiUTBEcyUomNXJgC",
     command: command,
@@ -166,7 +273,8 @@ async function zkCloudWorkerRequest(params: {
       repo: "nameservice",
       developer: "@staketab",
       metadata,
-      mode: "sync",
+      mode: mode ?? "sync",
+      jobId,
     },
     chain: `devnet`,
   };
