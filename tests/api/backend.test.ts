@@ -268,6 +268,98 @@ tx2: {
     console.log(`restart api call result:`, answer);
   });
 
+  it(`should get name info`, async () => {
+    console.log(`Getting name info...`);
+    const domain =
+      "I.jjD_j-uYDpIdCGCBH6IHh6JN2urF25qJpaa8Ot7yINB.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..MJiwWztFaIjsHeHy1sQZjLK-cJWb_SMKHJ3ynEdQJ7C.5WapXO2VlgP96My9pB71lcDJHnVkGCshArB53d47-IB.ppjYhZ2ayVWah5GbyUTeyQmexBXdhlHaodjMysmb4B.pFmNylXZ2dzZycnM3k3MnR2NqlmYt9Ga1oWN6JWaB.04giSaZ";
+    let args: string = JSON.stringify({
+      contractAddress,
+      domain,
+    });
+
+    let answer = await zkCloudWorkerRequest({
+      command: "execute",
+      task: "getMetadata",
+      args,
+      metadata: `commands info`,
+    });
+
+    console.log(`info api call success:`, answer.success);
+    if (!answer.success) return;
+
+    let data = JSON.parse(answer.result);
+    console.log(`metadata:`, data, data.nft.properties);
+    /*
+metadata: {
+  name: 'john',
+  address: 'B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME',
+  ipfs: 'bafkreianl25y2dzqpuayhh722knxia6ryev7g2w27y3gd7jibmoh5j5zbi',
+  expiry: '1746215243316',
+  uri: 'https://gateway.pinata.cloud/ipfs/bafkreianl25y2dzqpuayhh722knxia6ryev7g2w27y3gd7jibmoh5j5zbi',
+  url: 'https://minanft.io/nft/ibafkreianl25y2dzqpuayhh722knxia6ryev7g2w27y3gd7jibmoh5j5zbi',
+  nft: {
+    name: 'john',
+    address: 'B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME',
+    description: 'This is a description of Rollup NFT for Mina Domain Name Servicen for name john',
+    image: 'https://gateway.pinata.cloud/ipfs/bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i',
+    time: 1714679263289,
+    metadata: {
+      data: '21161981547182976305517746574118117871656156516836062223210247855127985791564',
+      kind: '8252828962110737286457977138501801683497326888025574661025446278939669800377'
+    },
+    properties: {
+      key11: [Object],
+      key12: [Object],
+      chain: [Object],
+      description: [Object],
+      contractAddress: [Object],
+      image: [Object]
+    }
+  }
+} {
+  key11: { data: 'value11', kind: 'string' },
+  key12: { data: 'value12', kind: 'string' },
+  chain: { data: 'devnet', kind: 'string' },
+  description: {
+    data: '19263687986456677652020525443450701074317180016554351608769251411729369318611',
+    kind: 'text',
+    linkedObject: {
+      type: 'text',
+      MerkleTreeHeight: 8,
+      size: 79,
+      text: 'This is a description of Rollup NFT for Mina Domain Name Servicen for name john'
+    }
+  },
+  contractAddress: {
+    data: '1744314013309764636504208939471112031220646451967268234165085446619894304615',
+    kind: 'text',
+    linkedObject: {
+      type: 'text',
+      MerkleTreeHeight: 7,
+      size: 55,
+      text: 'B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME'
+    }
+  },
+  image: {
+    data: '13859449145025830811875369399724069252973251707339667250775913572147906571686',
+    kind: 'image',
+    linkedObject: {
+      fileMerkleTreeRoot: '0',
+      MerkleTreeHeight: 0,
+      size: 287846,
+      mimeType: 'image/jpeg',
+      SHA3_512: 'qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==',
+      filename: 'image.jpg',
+      storage: 'i:bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i',
+      fileType: 'binary',
+      metadata: '0'
+    }
+  }
+}
+
+    */
+  });
+
   it(`should get blocks info`, async () => {
     console.log(`Getting blocks info...`);
     let args: string = JSON.stringify({

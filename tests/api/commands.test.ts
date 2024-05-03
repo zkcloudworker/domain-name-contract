@@ -202,7 +202,30 @@ describe("Domain Name Service API", () => {
     console.log(`restart api call result:`, answer);
   });
 
-  it(`should get blocks info`, async () => {
+  it(`should get name info`, async () => {
+    console.log(`Getting name info...`);
+    const domain =
+      "I.jjD_j-uYDpIdCGCBH6IHh6JN2urF25qJpaa8Ot7yINB.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..MJiwWztFaIjsHeHy1sQZjLK-cJWb_SMKHJ3ynEdQJ7C.5WapXO2VlgP96My9pB71lcDJHnVkGCshArB53d47-IB.ppjYhZ2ayVWah5GbyUTeyQmexBXdhlHaodjMysmb4B.pFmNylXZ2dzZycnM3k3MnR2NqlmYt9Ga1oWN6JWaB.04giSaZ";
+    let args: string = JSON.stringify({
+      contractAddress,
+      domain,
+    });
+
+    let answer = await zkCloudWorkerRequest({
+      command: "execute",
+      task: "getMetadata",
+      args,
+      metadata: `commands info`,
+    });
+
+    console.log(`info api call success:`, answer.success);
+    if (!answer.success) return;
+
+    let data = JSON.parse(answer.result);
+    console.log(`metadata:`, data, data.nft.properties);
+  });
+
+  it.skip(`should get blocks info`, async () => {
     console.log(`Getting blocks info...`);
     let args: string = JSON.stringify({
       contractAddress,
