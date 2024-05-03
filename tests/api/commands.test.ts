@@ -21,13 +21,13 @@ interface Transaction {
   signature?: string;
 }
 
-const name = "john";
+const name = "bob";
 const key = PrivateKey.fromBase58(
   // "B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME"
   "EKEDXUx9yeN5iA6TxqQvXnLmRjGkQGHJsiQgQgLNgFLVvE3u4kAv"
 );
 const oldDomain =
-  "I.jSFuCAJbyOCugCaZLsx8sjAM0PVVv-9YYUudtIwTSU.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWaklGa0ZWajhWeyl3Y5Vmbrt2aml3N2B.1tGajN3YjlmZ5JHa28mYiZHZtJnYrFnbrJTNmZDNB.ZtxNSaZ";
+  "I.3GyDb-mGcS3wKzNxQngu4VuJ5I1zCdiUDSzvhiL7ia.i9mYB.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..5XHfJ83GMwNe23H6I-YQ5fscsdMbTElqKnC3j3Si6YC.5WapXO2VlgP96My9pB71lcDJHnVkGCshArB53d47-IB.ppjYhZ2ayVWaodXc5hmcm1GavZXY6dzZ2V2dzdXZzB.qh3b3Z3YqV3YygGNrpXd6ZTYlJWcux2dpRDbu9WYB.hPZoXaZ";
 
 const addTransaction: Transaction = {
   operation: "add",
@@ -66,10 +66,10 @@ describe("Domain Name Service API", () => {
   it.skip(`should prepare update transaction`, async () => {
     const keys = [
       {
-        key11: "value11",
+        key11: "value11-5",
       },
       {
-        key12: "value12",
+        key12: "value12-5",
       },
       {
         chain: "devnet",
@@ -204,8 +204,7 @@ describe("Domain Name Service API", () => {
 
   it(`should get name info`, async () => {
     console.log(`Getting name info...`);
-    const domain =
-      "I.jjD_j-uYDpIdCGCBH6IHh6JN2urF25qJpaa8Ot7yINB.q9GauF.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..MJiwWztFaIjsHeHy1sQZjLK-cJWb_SMKHJ3ynEdQJ7C.5WapXO2VlgP96My9pB71lcDJHnVkGCshArB53d47-IB.ppjYhZ2ayVWah5GbyUTeyQmexBXdhlHaodjMysmb4B.pFmNylXZ2dzZycnM3k3MnR2NqlmYt9Ga1oWN6JWaB.04giSaZ";
+    const domain = oldDomain;
     let args: string = JSON.stringify({
       contractAddress,
       domain,
@@ -225,7 +224,7 @@ describe("Domain Name Service API", () => {
     console.log(`metadata:`, data, data.nft.properties);
   });
 
-  it.skip(`should get blocks info`, async () => {
+  it(`should get blocks info`, async () => {
     console.log(`Getting blocks info...`);
     let args: string = JSON.stringify({
       contractAddress,
