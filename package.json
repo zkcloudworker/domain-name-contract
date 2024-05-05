@@ -19,7 +19,7 @@
   "dependencies": {
     "adm-zip": "^0.5.12",
     "axios": "^1.6.8",
-    "minanft": "^1.10.2",
+    "minanft": "^1.10.5",
     "o1js": "^1.1.0",
     "tslib": "^2.6.2",
     "unique-names-generator": "^4.7.1",

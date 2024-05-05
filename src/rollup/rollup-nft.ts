@@ -3,6 +3,7 @@ import { Storage } from "../contract/storage";
 import { Metadata } from "../contract/metadata";
 import { RollupNFT, FileData } from "minanft";
 import { Field } from "o1js";
+import { sleep } from "zkcloudworker";
 
 export interface RollupNFTData {
   storage: Storage;
@@ -28,7 +29,7 @@ export async function createRollupNFT(
   const metadata = JSON.parse(tx.metadata || "{}");
   console.log("metadata:", metadata);
 
-  if (metadata.keys) {
+  if (metadata.keys !== undefined) {
     for (const item of metadata.keys) {
       Object.keys(item).forEach((key) => {
         console.log(`Key: ${key}, Value: ${item[key]}`);
@@ -37,29 +38,35 @@ export async function createRollupNFT(
     }
   }
 
-  if (metadata.description)
-    console.log(`Description: ${metadata.description}`),
-      nft.updateText({
-        key: `description`,
-        text: metadata.description,
-      });
+  if (metadata.description !== undefined) {
+    console.log("metadata.description:", metadata.description);
+    nft.updateText({
+      key: `description`,
+      text: metadata.description,
+    });
+  }
 
-  if (metadata.contractAddress)
-    console.log(`Contract Address: ${metadata.contractAddress}`),
-      nft.updateText({
-        key: `contractAddress`,
-        text: metadata.contractAddress,
-      });
+  if (metadata.contractAddress !== undefined) {
+    console.log("metadata.contractAddress:", metadata.contractAddress);
+    nft.updateText({
+      key: `contractAddress`,
+      text: metadata.contractAddress,
+    });
+  }
 
-  if (metadata.image)
-    console.log(`Image:`, metadata.image),
-      nft.updateFileData({
-        key: `image`,
-        type: "image",
-        data: getFileData(metadata.image),
-      });
+  if (metadata.image !== undefined) {
+    console.log("metadata.image:", metadata.image);
+    nft.updateFileData({
+      key: `image`,
+      type: "image",
+      data: getFileData(metadata.image),
+    });
+  }
 
+  if (process.env.PINATA_JWT === undefined)
+    throw new Error("Pinata JWT is undefined");
   console.log("Preparing commit data...");
+  await sleep(1000);
   await nft.prepareCommitData({ pinataJWT: process.env.PINATA_JWT });
 
   if (nft.storage === undefined) throw new Error("Storage is undefined");
@@ -71,7 +78,10 @@ export async function createRollupNFT(
     data: nft.metadataRoot.data,
     kind: nft.metadataRoot.kind,
   });
-
+  console.log(
+    "RollupNFT created successfully, ipfs:",
+    nft.storage.toIpfsHash()
+  );
   return { storage, metadataRoot } as RollupNFTData;
 }
 

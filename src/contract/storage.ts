@@ -1,4 +1,4 @@
-import { Struct, Field, Encoding, Provable } from "o1js";
+import { Struct, Field, Encoding, Provable, Bool } from "o1js";
 import axios from "axios";
 import { makeString } from "zkcloudworker";
 
@@ -22,6 +22,12 @@ export class Storage extends Struct({
   static assertEquals(a: Storage, b: Storage) {
     a.hashString[0].assertEquals(b.hashString[0]);
     a.hashString[1].assertEquals(b.hashString[1]);
+  }
+
+  static equals(a: Storage, b: Storage): Bool {
+    return a.hashString[0]
+      .equals(b.hashString[0])
+      .and(a.hashString[1].equals(b.hashString[1]));
   }
 
   static fromIpfsHash(hash: string): Storage {
