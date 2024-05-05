@@ -1965,7 +1965,7 @@ __metadata:
     adm-zip: "npm:^0.5.12"
     axios: "npm:^1.6.8"
     jest: "npm:^29.7.0"
-    minanft: "npm:^1.10.2"
+    minanft: "npm:^1.10.5"
     o1js: "npm:^1.1.0"
     ts-jest: "npm:^29.1.2"
     tslib: "npm:^2.6.2"
@@ -3350,9 +3350,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minanft@npm:^1.10.2":
-  version: 1.10.2
-  resolution: "minanft@npm:1.10.2"
+"minanft@npm:^1.10.5":
+  version: 1.10.5
+  resolution: "minanft@npm:1.10.5"
   dependencies:
     arweave: "npm:^1.15.0"
     axios: "npm:^1.6.8"
@@ -3360,8 +3360,8 @@ __metadata:
     jimp: "npm:^0.22.12"
     mime: "npm:^3.0.0"
   peerDependencies:
-    o1js: ^1.0.1
-  checksum: 10c0/8be35ed511cac815b209d88ded18f31f9cdd63c09264381625095c4b1426683f96a5662b876c1be2f3ee3c457feb3ef0d37db6b11c82a14b2cfc8af4a83f6673
+    o1js: ^1.1.0
+  checksum: 10c0/f2b43517d66c78393833a71369a78529bf0baa46a573a77f7f819bdac00727232c674f3d6b17ce50b28008b318671941b7791ecdd670b42c93e7837384d15893
   languageName: node
   linkType: hard
 

@@ -67,7 +67,6 @@ const api = new zkCloudWorkerClient({
 let deployer: PrivateKey;
 let sender: PublicKey;
 const ELEMENTS_NUMBER = 1;
-const BLOCKS_NUMBER = 2;
 
 interface User {
   name: string;
@@ -155,52 +154,6 @@ async function createUpdateTransaction(
   } as DomainSerializedTransaction;
 
   return tx;
-  /*
-  const deserializedTransaction =
-    await DomainNameServiceWorker.deserializeTransaction(tx);
-  if (
-    deserializedTransaction.status !== "pending" ||
-    deserializedTransaction.tx === undefined
-  ) {
-    console.error(
-      "Error in deserializing transaction:",
-      deserializedTransaction
-    );
-    return undefined;
-  }
-
-  const signature = Signature.create(
-    privateKey,
-    DomainTransaction.toFields(deserializedTransaction.tx)
-  );
-  tx.signature = signature.toBase58();
-  tx.metadata = serializeFields(
-    Metadata.toFields(deserializedTransaction.tx.domain.data.metadata)
-  );
-  tx.storage = serializeFields(
-    Storage.toFields(deserializedTransaction.tx.domain.data.storage)
-  );
-  try {
-    //console.log("crerateUpdateTransaction: verifying signature", tx);
-    if (tx.oldDomain === undefined) throw new Error("Old domain is undefined");
-    const domainTx = (await DomainNameServiceWorker.deserializeTransaction(tx))
-      .tx;
-    if (domainTx === undefined) throw new Error("Domain is undefined");
-    const signature = Signature.fromBase58(tx.signature);
-    const oldDomain = DomainName.fromFields(deserializeFields(tx.oldDomain));
-    const address = oldDomain.data.address;
-    const ok = signature
-      .verify(address, DomainTransaction.toFields(domainTx))
-      .toBoolean();
-    //console.log("Signature verified:", ok);
-    if (ok !== true) throw new Error("Signature is invalid");
-  } catch (error: any) {
-    console.error("Error in verifying signature:", error);
-    return undefined;
-  }
-
-  return tx;
-  */
 }
 
 describe("Domain Name Service Contract", () => {
@@ -625,16 +578,16 @@ async function prepareSignTransactionData(
     repo: "nameservice",
     task: "prepareSignTransactionData",
     transactions: [],
-    args: JSON.stringify(tx),
+    args: JSON.stringify({ tx, contractAddress: contractPublicKey.toBase58() }),
     developer: "@staketab",
     metadata: `sign`,
     mode: "sync",
   });
   console.log(`test prepareSignTransactionData api call result:`, answer);
-  //expect(answer).toBeDefined();
-  //expect(answer.success).toBe(true);
-  //expect(answer.result).toBeDefined();
-  //expect(answer.result).not.toBe("error");
+  expect(answer).toBeDefined();
+  expect(answer.success).toBe(true);
+  expect(answer.result).toBeDefined();
+  expect(answer.result.slice(5)).not.toBe("error");
   try {
     const data = JSON.parse(answer.result) as DomainSerializedTransaction;
     console.log(`test prepareSignTransactionData result tx:`, data);
@@ -689,7 +642,12 @@ async function getDatabase() {
   if (ipfs === undefined) return;
   const blockData = await loadFromIPFS(ipfs);
   console.log(`block data:`, blockData);
-  database = new DomainDatabase(blockData.database);
+  const databaseIPFS = blockData.databaseIPFS;
+  expect(databaseIPFS).toBeDefined();
+  const databaseJson = await loadFromIPFS(databaseIPFS.slice(2));
+  expect(databaseJson).toBeDefined();
+  expect(databaseJson.database).toBeDefined();
+  database = new DomainDatabase(databaseJson.database);
   const storages: Storage[] = [];
   Object.keys(database.data).forEach((name) => {
     console.log(`Name: ${name}, Record: ${database.data[name]}`);

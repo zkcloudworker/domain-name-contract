@@ -11,6 +11,8 @@ import {
 import { DomainDatabase } from "./database";
 import { serializeFields } from "../lib/fields";
 import { stringFromFields } from "../lib/hash";
+import { Metadata } from "../contract/metadata";
+import { Storage } from "../contract/storage";
 
 function isAccepted(
   element: DomainTransactionData,
@@ -32,11 +34,20 @@ function isAccepted(
         .toBoolean() === false
     )
       return { accepted: false, reason: "invalid signature" };
+
+    const value = map.get(element.tx.domain.key());
+    const oldValue = element.oldDomain.value();
+    if (value.equals(oldValue).toBoolean() === false)
+      return { accepted: false, reason: "the old domain does not match" };
   }
 
   if (element.txType() === "extend") {
     if (element.oldDomain === undefined)
       return { accepted: false, reason: "no old domain" };
+    const value = map.get(element.tx.domain.key());
+    const oldValue = element.oldDomain.value();
+    if (value.equals(oldValue).toBoolean() === false)
+      return { accepted: false, reason: "the old domain does not match" };
     if (
       element.tx.domain.data.expiry
         .greaterThan(element.oldDomain!.data.expiry)
@@ -46,6 +57,43 @@ function isAccepted(
         accepted: false,
         reason: "new expiry date is before the old expiry date",
       };
+    if (
+      element.tx.domain.name.equals(element.oldDomain.name).toBoolean() ===
+      false
+    )
+      return {
+        accepted: false,
+        reason: "the name does not match",
+      };
+    if (
+      element.tx.domain.data.address
+        .equals(element.oldDomain.data.address)
+        .toBoolean() === false
+    )
+      return {
+        accepted: false,
+        reason: "the address does not match",
+      };
+    if (
+      Metadata.equals(
+        element.tx.domain.data.metadata,
+        element.oldDomain.data.metadata
+      ).toBoolean() === false
+    )
+      return {
+        accepted: false,
+        reason: "the metadata does not match",
+      };
+    if (
+      Storage.equals(
+        element.tx.domain.data.storage,
+        element.oldDomain.data.storage
+      ).toBoolean() === false
+    )
+      return {
+        accepted: false,
+        reason: "the storage does not match",
+      };
   }
 
   if (element.txType() === "remove") {
@@ -53,6 +101,12 @@ function isAccepted(
       return {
         accepted: false,
         reason: "the domain name is not expired yet, cannot remove",
+      };
+    const value = map.get(element.tx.domain.key());
+    if (element.tx.domain.value().equals(value).toBoolean() === false)
+      return {
+        accepted: false,
+        reason: "the domain value does not match",
       };
   }
 
@@ -70,18 +124,21 @@ export function createBlock(params: {
   database: DomainDatabase;
   time: UInt64;
   calculateTransactions?: boolean;
-}): {
-  oldRoot: Field;
-  root: Field;
-  txsHash: Field;
-  txsCount: UInt32;
-  invalidTxsCount: number;
-  state: Field[];
-  proofData: string[];
-} {
+}):
+  | {
+      oldRoot: Field;
+      root: Field;
+      txsHash: Field;
+      txsCount: UInt32;
+      invalidTxsCount: number;
+      state: Field[];
+      proofData: string[];
+    }
+  | undefined {
   const { elements, map, database, time } = params;
-  const calculateTransactions = params.calculateTransactions ?? false;
+  //const calculateTransactions = params.calculateTransactions ?? false;
   console.log(`Calculating block for ${elements.length} elements...`);
+  if (elements.length === 0) return undefined; // nothing to do
 
   interface ElementState {
     isElementAccepted: boolean;
@@ -96,8 +153,9 @@ export function createBlock(params: {
   let invalidTxsCount = 0;
   let txsCount = 0;
   const proofData: string[] = [];
-  let state: Field[] = [];
-  const updates: ElementState[] = [];
+  let states: MapTransition[] = [];
+  let finalState: MapTransition | undefined = undefined;
+  //const updates: ElementState[] = [];
 
   for (const tx of elements) {
     if (tx.domainData === undefined) {
@@ -110,72 +168,49 @@ export function createBlock(params: {
       const hash = element.tx.hash();
       txsHash = txsHash.add(hash);
       const txType = element.txType();
-      // TODO: check for duplicate names
-      const { accepted, reason } = isAccepted(element, time, map);
+      let { accepted, reason } = isAccepted(element, time, map);
       //console.log("Processing transaction", { tx, accepted, reason });
       if (accepted) {
         tx.serializedTx.status = "accepted";
         const key = element.tx.domain.key();
         const value =
           txType === "remove" ? Field(0) : element.tx.domain.value();
-        map.set(key, value);
-        if (txType === "remove") database.remove(key);
-        else database.insert(element.tx.domain);
-        if (calculateTransactions) {
+        const oldValue = map.get(key);
+        const oldDatabaseValue = database.get(key);
+        let isStatePushed = false;
+
+        try {
+          map.set(key, value);
           const newRoot = map.getRoot();
-          const update = new MapUpdateData({
+          const updateData = new MapUpdateData({
             oldRoot: root,
             newRoot,
             time,
             tx: element.tx,
             witness: map.getWitness(key),
           });
-          updates.push({
+
+          const update: ElementState = {
             isElementAccepted: true,
-            update,
+            update: updateData,
             oldRoot: root,
             type: txType,
             element,
-          });
-        }
-      } else {
-        console.log(
-          `Transaction rejected: ${reason}, name: ${stringFromFields([
-            element.tx.domain.name,
-          ])}`,
-          tx
-        );
-        tx.serializedTx.status = "rejected";
-        tx.serializedTx.reason = reason ?? "invalid request";
-        if (calculateTransactions)
-          updates.push({
-            isElementAccepted: false,
-            oldRoot: root,
-            type: txType,
-            element,
-          });
-      }
-    }
-  }
-  if (calculateTransactions) {
-    let states: MapTransition[] = [];
-    for (const update of updates) {
-      const state = update.isElementAccepted
-        ? update.type === "add"
-          ? MapTransition.add(update.update!)
-          : update.type === "remove"
-          ? MapTransition.remove(update.update!)
-          : update.type === "update"
-          ? MapTransition.update(
-              update.update!,
-              update.element.oldDomain!,
-              update.element.signature!
-            )
-          : MapTransition.extend(update.update!, update.element.oldDomain!)
-        : MapTransition.reject(update.oldRoot, time, update.element.tx);
-      states.push(state);
-      const tx = update.isElementAccepted
-        ? {
+          };
+          const state =
+            update.type === "add"
+              ? MapTransition.add(update.update!)
+              : update.type === "remove"
+              ? MapTransition.remove(update.update!)
+              : update.type === "update"
+              ? MapTransition.update(
+                  update.update!,
+                  update.element.oldDomain!,
+                  update.element.signature!
+                )
+              : MapTransition.extend(update.update!, update.element.oldDomain!);
+
+          const tx = {
             time,
             oldRoot: update.oldRoot.toJSON(),
             type: update.type,
@@ -186,8 +221,59 @@ export function createBlock(params: {
               ? serializeFields(DomainName.toFields(update.element.oldDomain))
               : undefined,
             signature: update.element.signature?.toBase58(),
+          };
+          const newState: MapTransition =
+            finalState === undefined
+              ? state
+              : MapTransition.merge(finalState, state);
+
+          isStatePushed = true;
+          finalState = newState;
+          states.push(state);
+          proofData.push(JSON.stringify(tx, null, 2));
+          if (txType === "remove") database.remove(key);
+          else database.insert(element.tx.domain);
+        } catch (e) {
+          console.error(
+            "createBlock: Error processing transaction for name",
+            stringFromFields([element.tx.domain.name]),
+            e
+          );
+          if (isStatePushed) {
+            console.error(
+              "createBlock: State is already pushed, but error has occurred"
+            );
+            return undefined;
           }
-        : {
+          map.set(key, oldValue);
+          database.put(key, oldDatabaseValue);
+          accepted = false;
+          reason = "Rollup error: exception in processing transaction";
+        }
+      }
+
+      if (!accepted) {
+        console.log(
+          `Transaction rejected: ${reason}, name: ${stringFromFields([
+            element.tx.domain.name,
+          ])}`,
+          tx
+        );
+        tx.serializedTx.status = "rejected";
+        tx.serializedTx.reason = reason ?? "invalid request";
+        const update: ElementState = {
+          isElementAccepted: false,
+          oldRoot: root,
+          type: txType,
+          element,
+        };
+        try {
+          const state = MapTransition.reject(
+            update.oldRoot,
+            time,
+            update.element.tx
+          );
+          const tx = {
             time: time.toBigInt().toString(),
             oldRoot: update.oldRoot.toJSON(),
             type: update.type,
@@ -195,25 +281,34 @@ export function createBlock(params: {
             state: serializeFields(MapTransition.toFields(state)),
             tx: serializeFields(DomainTransaction.toFields(update.element.tx)),
           };
-      proofData.push(JSON.stringify(tx, null, 2));
+          const newState: MapTransition =
+            finalState === undefined
+              ? state
+              : MapTransition.merge(finalState, state);
+          finalState = newState;
+          states.push(state);
+          proofData.push(JSON.stringify(tx, null, 2));
+        } catch (e) {
+          console.error(
+            "createBlock: Error processing reject transaction for name",
+            stringFromFields([update.element.tx.domain.name]),
+            update,
+            e
+          );
+          return undefined;
+        }
+      }
     }
-
-    let finalState: MapTransition = states[0];
-    for (let i = 1; i < states.length; i++) {
-      const newState = MapTransition.merge(finalState, states[i]);
-      finalState = newState;
-    }
-    state = MapTransition.toFields(finalState);
   }
 
+  if (finalState === undefined) return undefined;
+  const state = MapTransition.toFields(finalState);
   const root = map.getRoot();
+
   console.log(
-    "Block calculated:",
-    txsCount,
-    "transactions",
-    "invalid:",
-    invalidTxsCount
+    `Block calculated: ${txsCount} transactions, invalid txs: ${invalidTxsCount}`
   );
+
   return {
     state,
     proofData,

@@ -20,6 +20,20 @@ export class DomainDatabase {
     delete this.data[stringFromFields([name])];
   }
 
+  get(name: Field): DomainName | undefined {
+    const value = this.data[stringFromFields([name])];
+    if (value === undefined) return undefined;
+    return new DomainName(DomainName.fromFields(deserializeFields(value)));
+  }
+
+  put(name: Field, domain: DomainName | undefined) {
+    if (domain === undefined) {
+      this.remove(name);
+    } else {
+      this.insert(domain);
+    }
+  }
+
   getRoot(): Field {
     const map = new MerkleMap();
     Object.keys(this.data).map((key) => {
