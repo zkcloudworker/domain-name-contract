@@ -27,7 +27,7 @@ const key = PrivateKey.fromBase58(
   "EKEDXUx9yeN5iA6TxqQvXnLmRjGkQGHJsiQgQgLNgFLVvE3u4kAv"
 );
 const oldDomain =
-  "I.EugfR_kZCI00mBBkMZC5Hf_uLtde4VpJ40goS5gaZKD.qFWblNX.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWanhXbi9WaydWZ3JHdsxGZqR3d0cjYjB.hVGes5mNoZ3MlRTezMWczVXeqd3YycjbsVHeiNWeB.C3DfkaZ";
+  "I.8QddGGx0zCHfaO8QcaF7WFZp_jrJ01vrUG_q7DfNlYB.2lGdxE.Vqnt1nL96MXwSoWhQocaD_1w7lC9xdi49TEAIb_4K5..0TaZ9FVrJDryG_GAp_WPvbv19kaT94Z2PwtbLso1CTC.E917nfIY6S-GGfj0ez0Odu_LSH27dazHaPKbVVXDPTD.ppjYhZ2ayVWaktGe3wWc5dmMpdWevxGalBHe4d3M1.hpGbl1Was9maqZGdqZjb2o2d11WdsBHcnpGaklXYB.B";
 
 const addTransaction: Transaction = {
   operation: "add",
@@ -202,7 +202,7 @@ describe("Domain Name Service API", () => {
     console.log(`restart api call result:`, answer);
   });
 
-  it.skip(`should get name info`, async () => {
+  it(`should get name info`, async () => {
     console.log(`Getting name info...`);
     const domain = oldDomain;
     let args: string = JSON.stringify({

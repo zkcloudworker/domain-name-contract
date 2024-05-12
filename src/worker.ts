@@ -28,6 +28,7 @@ import {
   MerkleMap,
   Encoding,
   fetchAccount,
+  Cache,
 } from "o1js";
 import {
   MapTransition,
@@ -83,6 +84,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   static contractVerificationKey: VerificationKey | undefined = undefined;
   static blockContractVerificationKey: VerificationKey | undefined = undefined;
   static validatorsVerificationKey: VerificationKey | undefined = undefined;
+  readonly cache: Cache;
   readonly MIN_TIME_BETWEEN_BLOCKS = 1000 * 60 * 1; // 2 minutes
   readonly MAX_TIME_BETWEEN_BLOCKS = 1000 * 60 * 60; // 60 minutes
   readonly MIN_TRANSACTIONS = 1;
@@ -90,6 +92,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
 
   constructor(cloud: Cloud) {
     super(cloud);
+    this.cache = Cache.FileSystem(this.cloud.cache);
   }
   public async deployedContracts(): Promise<DeployedSmartContract[]> {
     throw new Error("not implemented");
@@ -104,7 +107,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       console.time("compiled MapUpdate");
       DomainNameServiceWorker.mapUpdateVerificationKey = (
         await MapUpdate.compile({
-          cache: this.cloud.cache,
+          cache: this.cache,
         })
       ).verificationKey;
       console.timeEnd("compiled MapUpdate");
@@ -119,7 +122,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       console.time("compiled BlockContract");
       DomainNameServiceWorker.blockContractVerificationKey = (
         await BlockContract.compile({
-          cache: this.cloud.cache,
+          cache: this.cache,
         })
       ).verificationKey;
       console.timeEnd("compiled BlockContract");
@@ -128,7 +131,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       console.time("compiled ValidatorsVoting");
       DomainNameServiceWorker.validatorsVerificationKey = (
         await ValidatorsVoting.compile({
-          cache: this.cloud.cache,
+          cache: this.cache,
         })
       ).verificationKey;
       console.timeEnd("compiled ValidatorsVoting");
@@ -138,7 +141,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       console.time("compiled DomainNameContract");
       DomainNameServiceWorker.contractVerificationKey = (
         await DomainNameContract.compile({
-          cache: this.cloud.cache,
+          cache: this.cache,
         })
       ).verificationKey;
       console.timeEnd("compiled DomainNameContract");

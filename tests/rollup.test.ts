@@ -57,8 +57,8 @@ import packageJson from "../package.json";
 const { name: repo, author: developer, version } = packageJson;
 
 setNumberOfWorkers(8);
-const chain: blockchain = "lightnet" as blockchain;
-const deploy = false;
+const chain: blockchain = "local" as blockchain;
+const deploy = true;
 const useLocalCloudWorker = true;
 const api = new zkCloudWorkerClient({
   jwt: useLocalCloudWorker ? "local" : JWT,
@@ -68,7 +68,7 @@ const api = new zkCloudWorkerClient({
 
 let deployer: PrivateKey;
 let sender: PublicKey;
-const ELEMENTS_NUMBER = 1;
+const ELEMENTS_NUMBER = 2;
 
 interface User {
   name: string;
@@ -161,7 +161,8 @@ describe("Domain Name Service Contract", () => {
       deployer = PrivateKey.fromBase58(DEPLOYER);
     }
 
-    process.env.DEPLOYER = deployer.toBase58();
+    process.env.DEPLOYER_PRIVATE_KEY = deployer.toBase58();
+    process.env.DEPLOYER_PUBLIC_KEY = deployer.toPublicKey().toBase58();
     if (deploy) {
       expect(contractPrivateKey).toBeDefined();
       expect(contractPrivateKey.toPublicKey().toBase58()).toBe(
@@ -394,7 +395,7 @@ describe("Domain Name Service Contract", () => {
     }
     Memory.info(`tasks processed`);
   });
-  return;
+
   it(`should get Rollup's NFT URLs and uri from the DA layer`, async () => {
     await getDatabase();
   });
@@ -464,7 +465,7 @@ describe("Domain Name Service Contract", () => {
     await getDatabase();
   });
 
-  it.skip(`should change validators`, async () => {
+  it(`should change validators`, async () => {
     console.log(`Changing validators...`);
     Memory.info("changing validators");
     const expiry = UInt64.from(Date.now() + 1000 * 60 * 60 * 24 * 2000);
