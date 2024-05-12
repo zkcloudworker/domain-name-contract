@@ -14,7 +14,7 @@ import {
 } from "o1js";
 import { Metadata } from "../contract/metadata";
 import { Storage } from "../contract/storage";
-import { serializeFields, deserializeFields } from "../lib/fields";
+import { serializeFields, deserializeFields } from "zkcloudworker";
 
 export type DomainTransactionType = "add" | "extend" | "update" | "remove"; // removeExpired
 export type DomainTransactionStatus =

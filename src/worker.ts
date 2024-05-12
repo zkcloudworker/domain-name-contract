@@ -8,6 +8,8 @@ import {
   CloudTransaction,
   makeString,
   accountBalanceMina,
+  deserializeFields,
+  serializeFields,
 } from "zkcloudworker";
 import os from "os";
 import assert from "node:assert/strict";
@@ -43,7 +45,6 @@ import {
   DomainCloudTransactionStatus,
 } from "./rollup/transaction";
 import { Storage } from "./contract/storage";
-import { deserializeFields, serializeFields } from "./lib/fields";
 import {
   ValidatorsDecision,
   ValidatorsVoting,
@@ -75,7 +76,6 @@ import { RollupNFTData, createRollupNFT } from "./rollup/rollup-nft";
 import { Metadata } from "minanft";
 
 const fullValidation = true;
-const waitTx = true as boolean;
 const proofsOff = false as boolean;
 
 export class DomainNameServiceWorker extends zkCloudWorker {
@@ -83,10 +83,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   static contractVerificationKey: VerificationKey | undefined = undefined;
   static blockContractVerificationKey: VerificationKey | undefined = undefined;
   static validatorsVerificationKey: VerificationKey | undefined = undefined;
-  readonly MIN_TIME_BETWEEN_BLOCKS = 1000 * 60 * 1; // 4 minutes
+  readonly MIN_TIME_BETWEEN_BLOCKS = 1000 * 60 * 1; // 2 minutes
   readonly MAX_TIME_BETWEEN_BLOCKS = 1000 * 60 * 60; // 60 minutes
   readonly MIN_TRANSACTIONS = 1;
-  readonly MAX_TRANSACTIONS = 4;
+  readonly MAX_TRANSACTIONS = 50;
 
   constructor(cloud: Cloud) {
     super(cloud);
@@ -579,8 +579,8 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         {
           contractAddress: contractAddress.toBase58(),
           startBlock: startBlock.toBase58(),
-          contractState,
           blocks,
+          contractState,
         },
         null,
         2
@@ -718,8 +718,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   }
 
   private async proveRollupBlock(): Promise<string | undefined> {
-    if (waitTx && this.cloud.isLocalCloud === false)
-      throw new Error("waitTx is not allowed in production");
     if (!(await this.run())) return "proveRollupBlock is already running";
     if (this.cloud.args === undefined)
       throw new Error("this.cloud.args is undefined");
@@ -730,7 +728,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     if (args.contractAddress === undefined)
       throw new Error("args.contractAddress is undefined");
     if (args.contractAddress !== nameContract.contractAddress) {
-      console.error("proveRollupBlock: ontractAddress is invalid");
+      console.error("proveRollupBlock: contractAddress is invalid");
       return "contractAddress is invalid";
     }
     if (args.blockAddress === undefined)
@@ -858,8 +856,9 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     )
       throw new Error("verificationKey is undefined");
 
-    const deployer = await this.cloud.getDeployer();
-    if (deployer === undefined) throw new Error("deployer is undefined");
+    const deployerKeyPair = await this.cloud.getDeployer();
+    if (deployerKeyPair === undefined) throw new Error("deployer is undefined");
+    const deployer = PrivateKey.fromBase58(deployerKeyPair.privateKey);
     const sender = deployer.toPublicKey();
     await this.fetchMinaAccount({ publicKey: sender, force: true });
     await this.fetchMinaAccount({ publicKey: contractAddress, force: true });
@@ -884,7 +883,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     );
 
     await tx.prove();
-    const txSent = await tx.sign([deployer]).send();
+    const txSent = await tx.sign([deployer]).safeSend();
     if (txSent.errors.length > 0) {
       console.error(
         `prove block tx error: hash: ${txSent.hash} status: ${txSent.status}  errors: ${txSent.errors}`
@@ -894,19 +893,27 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         `prove block tx sent: hash: ${txSent.hash} status: ${txSent.status}`
       );
     if (txSent.status !== "pending") {
-      await this.cloud.releaseDeployer([]);
+      await this.cloud.releaseDeployer({
+        publicKey: deployerKeyPair.publicKey,
+        txsHashes: [],
+      });
       throw new Error("Error sending prove block transaction");
     }
-    await this.cloud.releaseDeployer([txSent.hash]);
+    await this.cloud.releaseDeployer({
+      publicKey: deployerKeyPair.publicKey,
+      txsHashes: [txSent.hash],
+    });
     //console.log("Deleting proveBlock task", this.cloud.taskId);
     console.log(`Block ${blockNumber} is proved`);
     await this.cloud.deleteTask(this.cloud.taskId);
     console.timeEnd("proveBlock");
-    if (waitTx) {
-      const txIncluded = await txSent.wait();
-      console.log(
-        `prove block ${blockNumber} tx included into block: hash: ${txIncluded.hash} status: ${txIncluded.status}`
-      );
+    if (this.cloud.isLocalCloud === true) {
+      if (this.cloud.chain !== "zeko") {
+        const txIncluded = await txSent.safeWait();
+        console.log(
+          `prove block ${blockNumber} tx included into block: hash: ${txIncluded.hash} status: ${txIncluded.status}`
+        );
+      }
       await sleep(20000);
     }
     await this.stop();
@@ -914,8 +921,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   }
 
   private async validateRollupBlock(): Promise<string | undefined> {
-    if (waitTx && this.cloud.isLocalCloud === false)
-      throw new Error("waitTx is not allowed in production");
     if (!(await this.run())) return "validateRollupBlock is already running";
 
     if (this.cloud.args === undefined)
@@ -1062,16 +1067,15 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       const blockStorage = block.storage.get();
       const hash = blockStorage.toIpfsHash();
       const json = await loadFromIPFS(hash);
-      if (json.databaseIPFS === undefined)
-        throw new Error("json.databaseIPFS is undefined");
-      if (json.databaseIPFS.startsWith("i:") === false)
-        throw new Error("json.databaseIPFS does not start with 'i:'");
-      if (json.mapIPFS === undefined)
-        throw new Error("json.mapIPFS is undefined");
-      if (json.mapIPFS.startsWith("i:") === false)
-        throw new Error("json.mapIPFS does not start with 'i:'");
-      const databaseJson = await loadFromIPFS(json.databaseIPFS.substring(2));
-      const mapJson = await loadFromIPFS(json.mapIPFS.substring(2));
+      if (json.database === undefined)
+        throw new Error("json.database is undefined");
+      if (json.database.startsWith("i:") === false)
+        throw new Error("json.database does not start with 'i:'");
+      if (json.map === undefined) throw new Error("json.map is undefined");
+      if (json.map.startsWith("i:") === false)
+        throw new Error("json.map does not start with 'i:'");
+      const databaseJson = await loadFromIPFS(json.database.substring(2));
+      const mapJson = await loadFromIPFS(json.map.substring(2));
 
       /* validate json contents 
       blockNumber,
@@ -1132,21 +1136,21 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         const previousBlockHash = previousBlockStorage.toIpfsHash();
         const previousBlockJson = await loadFromIPFS(previousBlockHash);
         //console.log("previousBlockJson map:", previousBlockJson.map);
-        if (previousBlockJson.databaseIPFS === undefined)
-          throw new Error("previousBlockJson.databaseIPFS is undefined");
-        if (previousBlockJson.databaseIPFS.startsWith("i:") === false)
+        if (previousBlockJson.database === undefined)
+          throw new Error("previousBlockJson.database is undefined");
+        if (previousBlockJson.database.startsWith("i:") === false)
           throw new Error(
-            "previousBlockJson.databaseIPFS does not start with 'i:'"
+            "previousBlockJson.database does not start with 'i:'"
           );
-        if (previousBlockJson.mapIPFS === undefined)
-          throw new Error("previousBlockJson.mapIPFS is undefined");
-        if (previousBlockJson.mapIPFS.startsWith("i:") === false)
-          throw new Error("previousBlockJson.mapIPFS does not start with 'i:'");
+        if (previousBlockJson.map === undefined)
+          throw new Error("previousBlockJson.map is undefined");
+        if (previousBlockJson.map.startsWith("i:") === false)
+          throw new Error("previousBlockJson.map does not start with 'i:'");
         const previousBlockDatabaseJson = await loadFromIPFS(
-          previousBlockJson.databaseIPFS.substring(2)
+          previousBlockJson.database.substring(2)
         );
         const previousBlockMapJson = await loadFromIPFS(
-          previousBlockJson.mapIPFS.substring(2)
+          previousBlockJson.map.substring(2)
         );
         database = new DomainDatabase(previousBlockDatabaseJson.database);
         //console.log("Previous Block Database", database.data);
@@ -1177,7 +1181,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         map: oldMap,
         time: timeCreated,
         database,
-        calculateTransactions: true,
       });
       if (createdBlock === undefined)
         throw new Error("validateRollupBlock: createdBlock is undefined");
@@ -1310,8 +1313,9 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     if (proof.publicInput.hash.toJSON() !== validators.hash.toJSON())
       throw new Error("Invalid validators hash in proof");
 
-    const deployer = await this.cloud.getDeployer();
-    if (deployer === undefined) throw new Error("deployer is undefined");
+    const deployerKeyPair = await this.cloud.getDeployer();
+    if (deployerKeyPair === undefined) throw new Error("deployer is undefined");
+    const deployer = PrivateKey.fromBase58(deployerKeyPair.privateKey);
     const sender = deployer.toPublicKey();
     if (previousBlockAddress !== undefined)
       await this.fetchMinaAccount({
@@ -1356,7 +1360,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     );
 
     await tx.prove();
-    const txSent = await tx.sign([deployer]).send();
+    const txSent = await tx.sign([deployer]).safeSend();
     if (txSent.errors.length > 0) {
       console.error(
         `validate block tx error: hash: ${txSent.hash} status: ${txSent.status}  errors: ${txSent.errors}`
@@ -1366,10 +1370,16 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         `validate block tx sent: hash: ${txSent.hash} status: ${txSent.status}`
       );
     if (txSent.status !== "pending") {
-      await this.cloud.releaseDeployer([]);
+      await this.cloud.releaseDeployer({
+        publicKey: deployerKeyPair.publicKey,
+        txsHashes: [],
+      });
       throw new Error("Error sending block creation transaction");
     }
-    await this.cloud.releaseDeployer([txSent.hash]);
+    await this.cloud.releaseDeployer({
+      publicKey: deployerKeyPair.publicKey,
+      txsHashes: [txSent.hash],
+    });
     //console.log("Deleting validateBlock task", this.cloud.taskId);
     await this.cloud.deleteTask(this.cloud.taskId);
     if (validated) {
@@ -1403,11 +1413,13 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       });
     }
     console.timeEnd(`block ${args.blockNumber} validated`);
-    if (waitTx) {
-      const txIncluded = await txSent.wait();
-      console.log(
-        `validate block ${blockNumber} tx included into block: hash: ${txIncluded.hash} status: ${txIncluded.status}`
-      );
+    if (this.cloud.isLocalCloud === true) {
+      if (this.cloud.chain !== "zeko") {
+        const txIncluded = await txSent.safeWait();
+        console.log(
+          `validate block ${blockNumber} tx included into block: hash: ${txIncluded.hash} status: ${txIncluded.status}`
+        );
+      }
       await sleep(20000);
     }
     await this.stop();
@@ -1415,7 +1427,8 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   }
 
   public static async deserializeTransaction(
-    tx: DomainSerializedTransaction
+    tx: DomainSerializedTransaction,
+    signatureRequired = true
   ): Promise<{
     tx?: DomainTransaction;
     oldDomain?: DomainName;
@@ -1448,6 +1461,11 @@ export class DomainNameServiceWorker extends zkCloudWorker {
           tx.storage === undefined ||
           tx.metadata === undefined
         ) {
+          if (signatureRequired)
+            return {
+              status: "invalid",
+              reason: "signature, metadata or storage is undefined",
+            };
           //console.log("creating update NFT", tx);
           const nft: RollupNFTData = await createRollupNFT(tx);
           metadata = nft.metadataRoot;
@@ -1521,16 +1539,16 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       }
       if (contractAddress.toBase58() !== nameContract.contractAddress) {
         console.error("prepareSignTransactionData: contractAddress is invalid");
-        return "contractAddress is invalid";
+        return "error: contractAddress is invalid";
       }
       if (args.tx === undefined) {
         console.error("prepareSignTransactionData: tx is undefined");
-        return "error";
+        return "error: tx is undefined";
       }
       const tx = args.tx as DomainSerializedTransaction;
       console.log("prepareSignTransactionData", tx);
       const deserializedTransaction =
-        await DomainNameServiceWorker.deserializeTransaction(tx);
+        await DomainNameServiceWorker.deserializeTransaction(tx, false);
       if (
         deserializedTransaction.status !== "pending" ||
         deserializedTransaction.tx === undefined
@@ -1539,7 +1557,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
           "Error in deserializing transaction:",
           deserializedTransaction
         );
-        return "error";
+        return (
+          "error:" + deserializedTransaction.reason ??
+          "error in deserializing transaction"
+        );
       }
 
       const signatureData = DomainTransaction.toFields(
@@ -1559,7 +1580,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       return JSON.stringify(tx);
     } catch (error: any) {
       console.error("Error in prepareSignTransactionData", error);
-      return "error";
+      let msg: string = "error in prepareSignTransactionData";
+      if (error.message !== undefined && typeof error.message === "string")
+        msg = error.message;
+      return "error:" + msg;
     }
   }
 
@@ -1619,8 +1643,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
   private async createRollupBlock(
     txs: CloudTransaction[]
   ): Promise<string | undefined> {
-    if (waitTx && this.cloud.isLocalCloud === false)
-      throw new Error("waitTx is not allowed in production");
     if (!(await this.run())) return "createRollupBlock is already running";
 
     if (this.cloud.args === undefined)
@@ -1762,16 +1784,15 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       const storage = previousBlock.storage.get();
       const hash = storage.toIpfsHash();
       const json = await loadFromIPFS(hash);
-      if (json.databaseIPFS === undefined)
-        throw new Error("json.databaseIPFS is undefined");
-      if (json.databaseIPFS.startsWith("i:") === false)
-        throw new Error("json.databaseIPFS does not start with 'i:'");
-      if (json.mapIPFS === undefined)
-        throw new Error("json.mapIPFS is undefined");
-      if (json.mapIPFS.startsWith("i:") === false)
-        throw new Error("json.mapIPFS does not start with 'i:'");
-      const databaseJson = await loadFromIPFS(json.databaseIPFS.substring(2));
-      const mapJson = await loadFromIPFS(json.mapIPFS.substring(2));
+      if (json.database === undefined)
+        throw new Error("json.database is undefined");
+      if (json.database.startsWith("i:") === false)
+        throw new Error("json.database does not start with 'i:'");
+      if (json.map === undefined) throw new Error("json.map is undefined");
+      if (json.map.startsWith("i:") === false)
+        throw new Error("json.map does not start with 'i:'");
+      const databaseJson = await loadFromIPFS(json.database.substring(2));
+      const mapJson = await loadFromIPFS(json.map.substring(2));
       map.tree = treeFromJSON(mapJson.map);
       database = new DomainDatabase(databaseJson.database);
       let deletedCount = 0;
@@ -1882,7 +1903,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       map,
       time,
       database,
-      calculateTransactions: true,
     });
     if (createdBlock === undefined)
       throw new Error("createRollupBlock: createdBlock is undefined");
@@ -1933,7 +1953,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     console.time("database saved to IPFS");
     const databaseJson = {
       database: database.data,
-      mapIPFS: "i:" + mapHash,
+      map: "i:" + mapHash,
     };
     const databaseHash = await saveToIPFS({
       data: databaseJson,
@@ -1982,8 +2002,6 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       }),
       database: "i:" + databaseHash,
       map: "i:" + mapHash,
-      databaseIPFS: "i:" + databaseHash, // TODO: remove
-      mapIPFS: "i:" + mapHash, // TODO: remove
     };
     const hash = await saveToIPFS({
       data: json,
@@ -2094,7 +2112,10 @@ export class DomainNameServiceWorker extends zkCloudWorker {
       console.log(
         "Block producer balance is less than 10 MINA, replenishing..."
       );
-      const deployer = await this.cloud.getDeployer();
+      const deployerKeyPair = await this.cloud.getDeployer();
+      if (deployerKeyPair === undefined)
+        throw new Error("deployer is undefined");
+      const deployer = PrivateKey.fromBase58(deployerKeyPair.privateKey);
       if (deployer !== undefined) {
         const deployerPublicKey = deployer.toPublicKey();
         const transaction = await Mina.transaction(
@@ -2107,7 +2128,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
             });
           }
         );
-        const txSent = await transaction.sign([deployer]).send();
+        const txSent = await transaction.sign([deployer]).safeSend();
         console.log("Replenishing block producer balance tx sent:", {
           status: txSent.status,
           hash: txSent.hash,
@@ -2142,7 +2163,7 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     try {
       await tx.prove();
       console.timeEnd("prepared tx");
-      const txSent = await tx.send();
+      const txSent = await tx.safeSend();
       console.log(
         `Block ${blockNumber} sent with hash ${txSent.hash} and status ${txSent.status}`
       );
@@ -2152,11 +2173,13 @@ export class DomainNameServiceWorker extends zkCloudWorker {
         await this.stop();
         return "Error sending block creation transaction";
       }
-      if (waitTx) {
-        const txIncluded = await txSent.wait();
-        console.log(
-          `create block ${blockNumber} tx included into block: hash: ${txIncluded.hash} status: ${txIncluded.status}`
-        );
+      if (this.cloud.isLocalCloud === true) {
+        if (this.cloud.chain !== "zeko") {
+          const txIncluded = await txSent.safeWait();
+          console.log(
+            `create block ${blockNumber} tx included into block: hash: ${txIncluded.hash} status: ${txIncluded.status}`
+          );
+        }
         await sleep(20000);
       }
 
@@ -2246,99 +2269,3 @@ export class DomainNameServiceWorker extends zkCloudWorker {
     return result;
   }
 }
-
-export async function zkcloudworker(cloud: Cloud): Promise<zkCloudWorker> {
-  return new DomainNameServiceWorker(cloud);
-}
-
-/*
-  public async send(transaction: string): Promise<string | undefined> {
-    
-    minaInit();
-    const deployer = await getDeployer();
-    const sender = deployer.toPublicKey();
-    const contractAddress = PublicKey.fromBase58(this.args[1]);
-    const zkApp = new MapContract(contractAddress);
-    await this.fetchMinaAccount(deployer.toPublicKey());
-    await this.fetchMinaAccount(contractAddress);
-    let tx;
-
-    const args = JSON.parse(transaction);
-    if (this.args[0] === "add") {
-      const name = Field.fromJSON(args.name);
-      const address = PublicKey.fromBase58(args.address);
-      const signature = Signature.fromBase58(args.signature);
-      const storage: Storage = new Storage({
-        hashString: [
-          Field.fromJSON(args.storage[0]),
-          Field.fromJSON(args.storage[1]),
-        ],
-      });
-
-      tx = await Mina.transaction(
-        { sender, fee: await fee(), memo: "add" },
-        () => {
-          zkApp.add(name, address, storage, signature);
-        }
-      );
-    } else if (this.args[0] === "reduce") {
-      try {
-        const startActionState = Field.fromJSON(args.startActionState);
-        const endActionState = Field.fromJSON(args.endActionState);
-        const reducerState = new ReducerState({
-          count: Field.fromJSON(args.reducerState.count),
-          hash: Field.fromJSON(args.reducerState.hash),
-        });
-        const count = Number(reducerState.count.toBigInt());
-        console.log("ReducerState count", reducerState.count.toJSON());
-        await fetchMinaActions(contractAddress, startActionState);
-
-        const proof: MapUpdateProof = MapUpdateProof.fromJSON(
-          JSON.parse(args.proof) as JsonProof
-        );
-        console.log("proof count", proof.publicInput.count.toJSON());
-        const signature = Signature.fromBase58(args.signature);
-
-        tx = await Mina.transaction(
-          { sender, fee: await fee(), memo: "reduce" },
-          () => {
-            zkApp.reduce(
-              startActionState,
-              endActionState,
-              reducerState,
-              proof,
-              signature
-            );
-          }
-        );
-      } catch (error) {
-        console.log("Error in reduce", error);
-      }
-    } else if (this.args[0] === "setRoot") {
-      const root = Field.fromJSON(args.root);
-      const count = Field.fromJSON(args.count);
-      const signature = Signature.fromBase58(args.signature);
-
-      tx = await Mina.transaction(
-        { sender, fee: await fee(), memo: "reset" },
-        () => {
-          zkApp.setRoot(root, count, signature);
-        }
-      );
-    } else throw new Error("unknown action");
-
-    if (tx === undefined) throw new Error("tx is undefined");
-    await tx.prove();
-    const txSent = await tx.sign([deployer]).send();
-    if (txSent === undefined) throw new Error("tx is undefined");
-    const hash: string | undefined = txSent.hash;
-    if (hash === undefined) throw new Error("hash is undefined");
-    return hash;
-    
-    throw new Error("not implemented");
-  }
-
-  public async mint(transaction: string): Promise<string | undefined> {
-    throw new Error("not implemented");
-  }
-  */

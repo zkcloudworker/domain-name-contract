@@ -1,7 +1,7 @@
 import { Field, MerkleMap } from "o1js";
 import { DomainName } from "./transaction";
 import { stringFromFields } from "../lib/hash";
-import { serializeFields, deserializeFields } from "../lib/fields";
+import { serializeFields, deserializeFields } from "zkcloudworker";
 
 export class DomainDatabase {
   data: { [name: string]: string } = {};

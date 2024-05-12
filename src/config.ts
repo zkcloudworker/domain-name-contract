@@ -9,12 +9,14 @@ interface ContractConfig {
 
 export const nameContract: ContractConfig = {
   contractPrivateKey: PrivateKey.fromBase58(
-    "EKDoUN9nf8mQdpBuWY7Vveuiw3sxW6dCiq3HYKLdJGGgHk6Vb1Nx"
+    "EKEVjiMz5ogNynnKmLF1oRs6Wj5bZdW1itZgvpTQYaHrPnu3qFpG"
+    //"EKDoUN9nf8mQdpBuWY7Vveuiw3sxW6dCiq3HYKLdJGGgHk6Vb1Nx"
     //"EKE7VYjsrdekFzcZ2BLpeweZewnG6GRjfjU4WT4bw68k8pCy6HBq"
     //"EKDtgZwKqCHCXYCqaeZhfxiL5HXC9zQFAnXzEtcJGcjMtJFSCngZ"
     //"EKDv9j1xgaEeRgaoZUGyxiRvGAjo3eLcPtoasLCKrmopdKXodAAA"
   ),
-  contractAddress: "B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME",
+  contractAddress: "B62qnXXnnwnyUKbEBuQM64LEfNcBRzCkeNSCu3H4mhbe7ittQX2mDNS",
+  // "B62qrjWrAaXV65CZgpfhLdFynbFdyj851cWZPCPvF92mF3ohGDbNAME",
   // "B62qrR3kE3S9xsQy2Jq8tp3TceWDeAmiXhU4KCXh19HzAVPj7BiNAME",
   // "B62qmyBYvHL5g7os2HFcGJC1QASTkFC8ydUBZRKGrxDqhV853YoNAME",
   //"B62qqNQ9kMtc4L9p19eK8SfLRy8EamtMRWAVqcCaJSM1Q5AD3DjNAME",
@@ -40,6 +42,3 @@ export const validatorsPrivateKeys: PrivateKey[] = [
   PrivateKey.fromBase58("EKEdPmiFqHFXWdW2PSdEm3R2DbNrYX2JCZUW7ohkM5yfoGhMDX9b"),
   //PrivateKey.fromBase58("EKDnzzMz49eFxsqFt3FFmy6b933sJ9tUWuMEcfew241pzwPxk3aW"),
 ];
-
-export const JWT =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY0NTkwMzQ5NDYiLCJpYXQiOjE3MDEzNTY5NzEsImV4cCI6MTczMjg5Mjk3MX0.r94tKntDvLpPJT2zzEe7HMUcOAQYQu3zWNuyFFiChD0";

@@ -27,7 +27,7 @@ export async function createRollupNFT(
   });
 
   const metadata = JSON.parse(tx.metadata || "{}");
-  console.log("metadata:", metadata);
+  //console.log("metadata:", metadata);
 
   if (metadata.keys !== undefined) {
     for (const item of metadata.keys) {
@@ -39,7 +39,7 @@ export async function createRollupNFT(
   }
 
   if (metadata.description !== undefined) {
-    console.log("metadata.description:", metadata.description);
+    //console.log("metadata.description:", metadata.description);
     nft.updateText({
       key: `description`,
       text: metadata.description,
@@ -47,7 +47,7 @@ export async function createRollupNFT(
   }
 
   if (metadata.contractAddress !== undefined) {
-    console.log("metadata.contractAddress:", metadata.contractAddress);
+    //console.log("metadata.contractAddress:", metadata.contractAddress);
     nft.updateText({
       key: `contractAddress`,
       text: metadata.contractAddress,
@@ -55,7 +55,7 @@ export async function createRollupNFT(
   }
 
   if (metadata.image !== undefined) {
-    console.log("metadata.image:", metadata.image);
+    //console.log("metadata.image:", metadata.image);
     nft.updateFileData({
       key: `image`,
       type: "image",
@@ -65,7 +65,7 @@ export async function createRollupNFT(
 
   if (process.env.PINATA_JWT === undefined)
     throw new Error("Pinata JWT is undefined");
-  console.log("Preparing commit data...");
+  //console.log("Preparing commit data...");
   await sleep(1000);
   await nft.prepareCommitData({ pinataJWT: process.env.PINATA_JWT });
 
@@ -78,10 +78,12 @@ export async function createRollupNFT(
     data: nft.metadataRoot.data,
     kind: nft.metadataRoot.kind,
   });
+  /*
   console.log(
     "RollupNFT created successfully, ipfs:",
     nft.storage.toIpfsHash()
   );
+  */
   return { storage, metadataRoot } as RollupNFTData;
 }
 

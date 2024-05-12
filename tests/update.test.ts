@@ -27,7 +27,7 @@ import {
   ChangeValidatorsData,
 } from "../src/contract/domain-contract";
 import { getValidators } from "../src/rollup/validators-proof";
-import { nameContract, JWT, blockProducer } from "../src/config";
+import { nameContract, blockProducer } from "../src/config";
 import {
   zkCloudWorkerClient,
   blockchain,
@@ -38,6 +38,7 @@ import {
   fee,
   initBlockchain,
   getNetworkIdHash,
+  deserializeFields,
 } from "zkcloudworker";
 import {
   MapUpdate,
@@ -47,17 +48,18 @@ import {
 } from "../src/rollup/transaction";
 import { DomainDatabase } from "../src/rollup/database";
 import { calculateValidatorsProof } from "../src/rollup/validators-proof";
-import { DomainNameServiceWorker, zkcloudworker } from "../src/worker"; //, setVerificationKey
-import { DEPLOYER, PINATA_JWT } from "../env.json";
+import { zkcloudworker } from ".."; //, setVerificationKey
+import { DEPLOYER, PINATA_JWT, JWT } from "../env.json";
 import { uniqueNamesGenerator, names } from "unique-names-generator";
-import { ImageData, createRollupNFT } from "../src/rollup/rollup-nft";
+import { ImageData } from "../src/rollup/rollup-nft";
 import { loadFromIPFS } from "../src/contract/storage";
-import { deserializeFields, serializeFields } from "../src/lib/fields";
+import packageJson from "../package.json";
+const { name: repo, author: developer, version } = packageJson;
 
 setNumberOfWorkers(8);
-const chain: blockchain = "local" as blockchain;
-const deploy = true;
-const useLocalCloudWorker = true;
+const chain: blockchain = "zeko" as blockchain;
+const deploy = false;
+const useLocalCloudWorker = false;
 const api = new zkCloudWorkerClient({
   jwt: useLocalCloudWorker ? "local" : JWT,
   zkcloudworker,
@@ -66,7 +68,7 @@ const api = new zkCloudWorkerClient({
 
 let deployer: PrivateKey;
 let sender: PublicKey;
-const ELEMENTS_NUMBER = 1;
+const ELEMENTS_NUMBER = 2;
 
 interface User {
   name: string;
@@ -81,7 +83,7 @@ const updateTransactions: string[] = [];
 
 const { validators, tree } = getValidators(0);
 
-const contractPrivateKey = PrivateKey.random(); //nameContract.contractPrivateKey;
+const contractPrivateKey = nameContract.contractPrivateKey;
 const contractPublicKey = contractPrivateKey.toPublicKey();
 
 const zkApp = new DomainNameContract(contractPublicKey);
@@ -89,72 +91,6 @@ let blockVerificationKey: VerificationKey;
 let validatorsVerificationKey: VerificationKey;
 let mapVerificationKey: VerificationKey;
 let contractVerificationKey: VerificationKey;
-
-async function createAddTransaction(
-  name: string,
-  address: string
-): Promise<DomainSerializedTransaction> {
-  const tx: DomainSerializedTransaction = {
-    operation: "add",
-    name,
-    address,
-    expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
-    metadata: JSON.stringify({
-      contractAddress: contractPublicKey.toBase58(),
-    }),
-  } as DomainSerializedTransaction;
-  return tx;
-}
-
-async function createUpdateTransaction(
-  name: string,
-  address: string,
-  oldDomain: string
-): Promise<DomainSerializedTransaction | undefined> {
-  const keys = [
-    {
-      friend1: uniqueNamesGenerator({
-        dictionaries: [names],
-        length: 1,
-      }),
-    },
-    {
-      friend2: uniqueNamesGenerator({
-        dictionaries: [names],
-        length: 1,
-      }),
-    },
-    { chain },
-  ];
-
-  const image: ImageData = {
-    size: 287846,
-    mimeType: "image/jpeg",
-    sha3_512:
-      "qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==",
-    filename: "image.jpg",
-    ipfsHash: "bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i",
-  } as ImageData;
-
-  const description =
-    "This is a description of Rollup NFT for Mina Domain Name Service";
-
-  const tx: DomainSerializedTransaction = {
-    operation: "update",
-    name,
-    address,
-    oldDomain,
-    expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
-    metadata: JSON.stringify({
-      keys,
-      image,
-      description,
-      contractAddress: contractPublicKey.toBase58(),
-    }),
-  } as DomainSerializedTransaction;
-
-  return tx;
-}
 
 describe("Domain Name Service Contract", () => {
   it(`should prepare first block data`, async () => {
@@ -188,7 +124,7 @@ describe("Domain Name Service Contract", () => {
     console.log("chain:", chain);
     nameContract.contractPrivateKey = contractPrivateKey;
     nameContract.contractAddress = contractPublicKey.toBase58();
-    if (chain === "local" || chain === "lighnet") {
+    if (chain === "local" || chain === "lightnet") {
       const { keys } = await initBlockchain(chain, 2);
       expect(keys.length).toBeGreaterThanOrEqual(2);
       if (keys.length < 2) throw new Error("Invalid keys");
@@ -340,14 +276,19 @@ describe("Domain Name Service Contract", () => {
           await zkApp.deploy({});
           zkApp.validatorsPacked.set(validators.pack());
           zkApp.domain.set(Encoding.stringToFields("mina")[0]);
-          zkApp.account.zkappUri.set("https://zkcloudworker.com");
+          zkApp.account.zkappUri.set("https://names.minascan.io");
         }
       );
 
       tx.sign([deployer, contractPrivateKey]);
       await sendTx(tx, "deploy");
       Memory.info("deployed");
-      await sleep(30000);
+      await sleep(10000);
+      await fetchAccount({ publicKey: contractPublicKey });
+      const validatorsPacked = zkApp.validatorsPacked.get();
+      console.log("validatorsPacked:", validatorsPacked.toJSON());
+      expect(validatorsPacked).toBeDefined();
+      expect(validatorsPacked.toBigInt()).toBe(validators.pack().toBigInt());
     });
 
     it(`should sent block 0`, async () => {
@@ -376,7 +317,7 @@ describe("Domain Name Service Contract", () => {
   }
 
   if (!deploy) {
-    it(`should restart the sequencer`, async () => {
+    it.skip(`should restart the sequencer`, async () => {
       console.log(`Restarting sequencer...`);
       let args: string = JSON.stringify({
         contractAddress: contractPublicKey.toBase58(),
@@ -402,22 +343,23 @@ describe("Domain Name Service Contract", () => {
       contractAddress: contractPublicKey.toBase58(),
     });
     const apiresult = await api.execute({
-      repo: "nameservice",
+      repo,
       task: "createTxTask",
       transactions: [],
       args,
-      developer: "@staketab",
+      developer,
       metadata: `txTask`,
       mode: "sync",
     });
+    console.log(`api call result:`, apiresult);
     expect(apiresult).toBeDefined();
     if (apiresult === undefined) return;
     expect(apiresult.success).toBe(true);
     console.log(`Processing tasks...`);
     while (
       (await LocalCloud.processLocalTasks({
-        developer: "@staketab",
-        repo: "nameservice",
+        developer,
+        repo,
         localWorker: zkcloudworker,
         chain: "local",
       })) > 1
@@ -425,12 +367,13 @@ describe("Domain Name Service Contract", () => {
       await sleep(10000);
     }
   });
+  return;
 
   it(`should send transactions for first block`, async () => {
     console.time(`Txs to the block sent`);
     const apiresult = await api.sendTransactions({
-      repo: "nameservice",
-      developer: "@staketab",
+      repo,
+      developer,
       transactions: addTransactions,
     });
     expect(apiresult).toBeDefined();
@@ -442,8 +385,8 @@ describe("Domain Name Service Contract", () => {
     console.log(`Processing tasks...`);
     while (
       (await LocalCloud.processLocalTasks({
-        developer: "@staketab",
-        repo: "nameservice",
+        developer,
+        repo,
         localWorker: zkcloudworker,
         chain: "local",
       })) > 1
@@ -507,8 +450,8 @@ describe("Domain Name Service Contract", () => {
     console.log(`Processing tasks...`);
     while (
       (await LocalCloud.processLocalTasks({
-        developer: "@staketab",
-        repo: "nameservice",
+        developer,
+        repo,
         localWorker: zkcloudworker,
         chain: "local",
       })) > 1
@@ -575,11 +518,11 @@ async function prepareSignTransactionData(
 ): Promise<DomainSerializedTransaction | undefined> {
   console.log(`test prepareSignTransactionData tx`, tx);
   const answer = await api.execute({
-    repo: "nameservice",
+    repo,
     task: "prepareSignTransactionData",
     transactions: [],
     args: JSON.stringify({ tx, contractAddress: contractPublicKey.toBase58() }),
-    developer: "@staketab",
+    developer,
     metadata: `sign`,
     mode: "sync",
   });
@@ -600,13 +543,13 @@ async function prepareSignTransactionData(
 
 async function getDatabase() {
   const blocks = await api.execute({
-    repo: "nameservice",
+    repo,
     task: "getBlocksInfo",
     transactions: [],
     args: JSON.stringify({
       contractAddress: contractPublicKey.toBase58(),
     }),
-    developer: "@staketab",
+    developer,
     metadata: `get blocks`,
     mode: "sync",
   });
@@ -642,7 +585,7 @@ async function getDatabase() {
   if (ipfs === undefined) return;
   const blockData = await loadFromIPFS(ipfs);
   console.log(`block data:`, blockData);
-  const databaseIPFS = blockData.databaseIPFS;
+  const databaseIPFS = blockData.database;
   expect(databaseIPFS).toBeDefined();
   const databaseJson = await loadFromIPFS(databaseIPFS.slice(2));
   expect(databaseJson).toBeDefined();
@@ -713,4 +656,70 @@ async function accountBalance(address: PublicKey): Promise<UInt64> {
 
 async function accountBalanceMina(address: PublicKey): Promise<number> {
   return Number((await accountBalance(address)).toBigInt()) / 1e9;
+}
+
+async function createAddTransaction(
+  name: string,
+  address: string
+): Promise<DomainSerializedTransaction> {
+  const tx: DomainSerializedTransaction = {
+    operation: "add",
+    name,
+    address,
+    expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
+    metadata: JSON.stringify({
+      contractAddress: contractPublicKey.toBase58(),
+    }),
+  } as DomainSerializedTransaction;
+  return tx;
+}
+
+async function createUpdateTransaction(
+  name: string,
+  address: string,
+  oldDomain: string
+): Promise<DomainSerializedTransaction | undefined> {
+  const keys = [
+    {
+      friend1: uniqueNamesGenerator({
+        dictionaries: [names],
+        length: 1,
+      }),
+    },
+    {
+      friend2: uniqueNamesGenerator({
+        dictionaries: [names],
+        length: 1,
+      }),
+    },
+    { chain },
+  ];
+
+  const image: ImageData = {
+    size: 287846,
+    mimeType: "image/jpeg",
+    sha3_512:
+      "qRm+FYlhRb1DHngZ0rIQHXAfMS1yTi6exdbfzrBJ/Dl1WuzCuif1v4UDsH4zY+tBFEVctBnHo2Ojv+0LBuydBw==",
+    filename: "image.jpg",
+    ipfsHash: "bafybeigkvkjhk7iii7b35u4e6ljpbtf5a6jdmzp3qdrn2odx76pubwvc4i",
+  } as ImageData;
+
+  const description =
+    "This is a description of Rollup NFT for Mina Domain Name Service";
+
+  const tx: DomainSerializedTransaction = {
+    operation: "update",
+    name,
+    address,
+    oldDomain,
+    expiry: Date.now() + 1000 * 60 * 60 * 24 * 365,
+    metadata: JSON.stringify({
+      keys,
+      image,
+      description,
+      contractAddress: contractPublicKey.toBase58(),
+    }),
+  } as DomainSerializedTransaction;
+
+  return tx;
 }

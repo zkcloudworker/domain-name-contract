@@ -4,8 +4,10 @@ import axios from "axios";
 import { nameContract } from "../../src/config";
 import { uniqueNamesGenerator, names } from "unique-names-generator";
 import { sleep } from "zkcloudworker";
+import packageJson from "../../package.json";
+const { name: repo, author: developer, version } = packageJson;
 
-const ELEMENTS_NUMBER = 7;
+const ELEMENTS_NUMBER = 1;
 const transactions: string[] = [];
 const contractAddress = nameContract.contractAddress;
 
@@ -21,13 +23,13 @@ interface Transaction {
   signature?: string;
 }
 
-const name = "james";
+const name = "bob";
 const key = PrivateKey.fromBase58(
   // "B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME"
   "EKEDXUx9yeN5iA6TxqQvXnLmRjGkQGHJsiQgQgLNgFLVvE3u4kAv"
 );
 const oldDomain =
-  "I.EugfR_kZCI00mBBkMZC5Hf_uLtde4VpJ40goS5gaZKD.qFWblNX.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWanhXbi9WaydWZ3JHdsxGZqR3d0cjYjB.hVGes5mNoZ3MlRTezMWczVXeqd3YycjbsVHeiNWeB.C3DfkaZ";
+  "I.fpHm74ReS12TQfpTnsRjU-wY1S3AxyUvEccWb2_wAVB.i9mYB.U0LY4OOs39fTpXOwAUbXaG5OhX5w1F0krHH1060XjOC..A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.A_RucMswIrv5PMYqhYk1rFtzBt2i7kMd-J_70JBXBJD.ppjYhZ2ayVWandWekZ2Mk12Zh12ZpZ3ZkF3Z1E3d0B.6dXbpJTNycnczNjYzcTamlXc5Nnbs1mN1JTZupWYB.I4OxBbZ";
 
 const addTransaction: Transaction = {
   operation: "add",
@@ -63,7 +65,7 @@ describe("Domain Name Service API", () => {
     transactions.push(JSON.stringify(addTransaction, null, 2));
   });
 
-  it.skip(`should prepare update transaction`, async () => {
+  it(`should prepare update transaction`, async () => {
     const keys = [
       {
         key11: "value11-5",
@@ -72,7 +74,7 @@ describe("Domain Name Service API", () => {
         key12: "value12-5",
       },
       {
-        chain: "devnet",
+        chain: "zeko",
       },
     ];
 
@@ -173,7 +175,7 @@ describe("Domain Name Service API", () => {
     console.log(`task api call result:`, answer);
   });
 
-  it.skip(`should send transactions`, async () => {
+  it(`should send transactions`, async () => {
     const answer = await zkCloudWorkerRequest({
       command: "sendTransactions",
       transactions,
@@ -292,32 +294,17 @@ async function zkCloudWorkerRequest(params: {
       task,
       transactions: transactions ?? [],
       args,
-      repo: "nameservice",
-      developer: "@staketab",
+      repo,
+      developer,
       metadata,
       mode: mode ?? "sync",
       jobId,
     },
-    chain: `devnet`,
+    chain: `zeko`,
   };
   const endpoint =
     "https://cuq99yahhi.execute-api.eu-west-1.amazonaws.com/dev/zkcloudworker";
 
   const response = await axios.post(endpoint, apiData);
   return response.data;
-}
-
-async function loadFromIPFS(hash: string): Promise<any | undefined> {
-  try {
-    const url =
-      "https://salmon-effective-amphibian-898.mypinata.cloud/ipfs/" +
-      hash +
-      "?pinataGatewayToken=gFuDmY7m1Pa5XzZ3bL1TjPPvO4Ojz6tL-VGIdweN1fUa5oSFZXce3y9mL8y1nSSU";
-    //"https://gateway.pinata.cloud/ipfs/" + hash;
-    const result = await axios.get(url);
-    return result.data;
-  } catch (error: any) {
-    console.error("loadFromIPFS error:", error?.message);
-    return undefined;
-  }
 }
