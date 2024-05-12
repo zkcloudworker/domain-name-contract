@@ -9,7 +9,7 @@ import {
   DomainName,
 } from "./transaction";
 import { DomainDatabase } from "./database";
-import { serializeFields } from "../lib/fields";
+import { serializeFields } from "zkcloudworker";
 import { stringFromFields } from "../lib/hash";
 import { Metadata } from "../contract/metadata";
 import { Storage } from "../contract/storage";
@@ -123,7 +123,6 @@ export function createBlock(params: {
   map: MerkleMap;
   database: DomainDatabase;
   time: UInt64;
-  calculateTransactions?: boolean;
 }):
   | {
       oldRoot: Field;
@@ -136,7 +135,6 @@ export function createBlock(params: {
     }
   | undefined {
   const { elements, map, database, time } = params;
-  //const calculateTransactions = params.calculateTransactions ?? false;
   console.log(`Calculating block for ${elements.length} elements...`);
   if (elements.length === 0) return undefined; // nothing to do
 

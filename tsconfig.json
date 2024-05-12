@@ -12,18 +12,9 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "strictPropertyInitialization": false,
+    "moduleResolution": "node",
     "resolveJsonModule": true
   },
-  "include": [
-    "index.ts",
-    "src/**/*.ts",
-    "tests/**/*.ts",
-    "env.json",
-    "json/*.json"
-  ],
-  "exclude": ["node_modules"],
-  "ts-node": {
-    "esm": true, // «———— enabling ESM for ts-node
-    "experimentalSpecifierResolution": "node"
-  }
+  "include": ["**/*.ts", "package.json"],
+  "exclude": ["node_modules", "dist"]
 }

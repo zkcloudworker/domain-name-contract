@@ -45,7 +45,7 @@ import {
 } from "../src/rollup/transaction";
 import { DomainDatabase } from "../src/rollup/database";
 import { calculateValidatorsProof } from "../src/rollup/validators-proof";
-import { zkcloudworker } from "../src/worker"; //, setVerificationKey
+import { zkcloudworker } from ".."; //, setVerificationKey
 import { DEPLOYER, PINATA_JWT } from "../env.json";
 import { uniqueNamesGenerator, names } from "unique-names-generator";
 import { ImageData, createRollupNFT } from "../src/rollup/rollup-nft";

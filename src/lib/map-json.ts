@@ -4,7 +4,7 @@ import {
   fieldFromBase64,
   bigintFromBase64,
   bigintToBase64,
-} from "./base64";
+} from "zkcloudworker";
 
 export function treeToJSON(tree: MerkleTree) {
   const nodes: { [key: string]: string } = {};

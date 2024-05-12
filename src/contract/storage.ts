@@ -54,7 +54,7 @@ export async function saveToIPFS(params: {
   keyvalues?: object;
 }): Promise<string | undefined> {
   const { data, pinataJWT, name, keyvalues } = params;
-  console.log("saveToIPFS:", { name });
+  //console.log("saveToIPFS:", { name });
   if (pinataJWT === "local") {
     const hash = makeString(
       `QmTosaezLecDB7bAoUoXcrJzeBavHNZyPbPff1QHWw8xus`.length
@@ -95,10 +95,10 @@ export async function saveToIPFS(params: {
       config
     );
 
-    console.log("saveToIPFS result:", res.data);
+    console.log("saveToIPFS result:", { result: res.data, name, keyvalues });
     return res.data.IpfsHash;
   } catch (error: any) {
-    console.error("saveToIPFS error:", error?.message);
+    console.error("saveToIPFS error:", error?.message, { name, keyvalues });
     return undefined;
   }
 }
