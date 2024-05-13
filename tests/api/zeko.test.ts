@@ -23,7 +23,11 @@ interface Transaction {
   signature?: string;
 }
 
-const name = "bob";
+const name: string = uniqueNamesGenerator({
+  dictionaries: [names],
+  length: 1,
+}).toLowerCase();
+
 const key = PrivateKey.fromBase58(
   // "B62qj9e7AMwgDuuWtXG5FRdENBtsorEPbBaYHnG8d5KeAqKkEJANAME"
   "EKEDXUx9yeN5iA6TxqQvXnLmRjGkQGHJsiQgQgLNgFLVvE3u4kAv"
@@ -61,11 +65,11 @@ describe("Domain Name Service API", () => {
     console.timeEnd(`prepared data`);
   });
 
-  it.skip(`should prepare add transaction`, async () => {
+  it(`should prepare add transaction`, async () => {
     transactions.push(JSON.stringify(addTransaction, null, 2));
   });
 
-  it(`should prepare update transaction`, async () => {
+  it.skip(`should prepare update transaction`, async () => {
     const keys = [
       {
         key11: "value11-5",
@@ -154,7 +158,7 @@ describe("Domain Name Service API", () => {
     await sleep(1000);
   });
 
-  it.skip(`should add task to process transactions`, async () => {
+  it(`should add task to process transactions`, async () => {
     console.log(`Adding task to process transactions...`);
     /*
       adding task to process transactions
@@ -243,7 +247,7 @@ describe("Domain Name Service API", () => {
     if (!answer.success) return;
 
     let data = JSON.parse(answer.result);
-    console.log(`contract state:`, data);
+    console.log(`contract state:`, data.contractState);
 
     /*
     const hash = data.blocks[data.blocks.length - 1].ipfs;
