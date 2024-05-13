@@ -158,7 +158,7 @@ describe("Domain Name Service API", () => {
     await sleep(1000);
   });
 
-  it.skip(`should add task to process transactions`, async () => {
+  it(`should add task to process transactions`, async () => {
     console.log(`Adding task to process transactions...`);
     /*
       adding task to process transactions

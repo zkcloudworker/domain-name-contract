@@ -1,6 +1,6 @@
 {
   "name": "domain-name-service-contract",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "author": "DFST",
   "license": "Apache-2.0",
   "scripts": {
@@ -17,7 +17,7 @@
     "o1js": "^1.1.0",
     "tslib": "^2.6.2",
     "unique-names-generator": "^4.7.1",
-    "zkcloudworker": "^0.7.2"
+    "zkcloudworker": "^0.7.5"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
