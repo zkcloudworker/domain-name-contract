@@ -70,7 +70,7 @@ export async function createRollupNFT(
   await nft.prepareCommitData({ pinataJWT: process.env.PINATA_JWT });
 
   if (nft.storage === undefined) throw new Error("Storage is undefined");
-  if (nft.metadata === undefined) throw new Error("Metadata is undefined");
+  if (nft.metadataRoot === undefined) throw new Error("Metadata is undefined");
   const storage = new Storage({
     hashString: [nft.storage.hashString[0], nft.storage.hashString[1]],
   });
